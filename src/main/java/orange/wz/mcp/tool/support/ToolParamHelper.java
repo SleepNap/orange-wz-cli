@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -49,6 +50,13 @@ public final class ToolParamHelper {
         return Short.parseShort(String.valueOf(value));
     }
 
+    public static int getInt(Map<String, Object> params, String key, int defaultValue) {
+        Object value = params.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof Number n) return n.intValue();
+        return Integer.parseInt(String.valueOf(value));
+    }
+
     public static UUID getSessionId(Map<String, Object> params) {
         String text = requireString(params, "sessionId");
         return UUID.fromString(text);
@@ -76,6 +84,25 @@ public final class ToolParamHelper {
         String rootPath = requireString(params, rootKey);
         String nodePath = getString(params, nodeKey, "");
         return new NodeReference(rootPath, nodePath);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static List<Map<String, Object>> getObjectList(Map<String, Object> params, String key) {
+        Object value = params.get(key);
+        if (value == null) {
+            return List.of();
+        }
+        if (!(value instanceof List<?> list)) {
+            throw new McpException("Parameter must be an array: " + key);
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) {
+                throw new McpException("Array item must be an object in: " + key);
+            }
+            result.add(new HashMap<>((Map<String, Object>) map));
+        }
+        return result;
     }
 
     @SuppressWarnings("unchecked")

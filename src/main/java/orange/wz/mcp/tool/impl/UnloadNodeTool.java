@@ -7,11 +7,13 @@ import orange.wz.mcp.tool.support.ToolParamHelper;
 
 import java.util.Map;
 
+import static orange.wz.mcp.tool.support.ToolSchemas.nodeReferenceSchema;
+
 public final class UnloadNodeTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public UnloadNodeTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "卸载指定节点。rootPath 为已加载根文件或目录路径，nodePath 为根内节点路径。", nodeReferenceSchema());
         this.service = service;
     }
 

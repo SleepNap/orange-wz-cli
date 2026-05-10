@@ -5,13 +5,31 @@ import orange.wz.mcp.session.McpSessionManager;
 import orange.wz.mcp.tool.support.BaseSessionTool;
 import orange.wz.mcp.tool.support.ToolParamHelper;
 
+import java.util.List;
 import java.util.Map;
+
+import static orange.wz.mcp.tool.support.ToolSchemas.*;
 
 public final class CreateChildNodeTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public CreateChildNodeTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "在指定父节点下创建子节点。", objectSchema(
+                Map.ofEntries(
+                        Map.entry("rootPath", stringSchema()),
+                        Map.entry("nodePath", stringSchema()),
+                        Map.entry("type", stringSchema()),
+                        Map.entry("name", stringSchema()),
+                        Map.entry("value", stringSchema()),
+                        Map.entry("x", numberSchema()),
+                        Map.entry("y", numberSchema()),
+                        Map.entry("base64Png", stringSchema()),
+                        Map.entry("base64Mp3", stringSchema()),
+                        Map.entry("pngFormat", stringSchema()),
+                        Map.entry("autoParse", booleanSchema())
+                ),
+                List.of("rootPath", "type", "name")
+        ));
         this.service = service;
     }
 

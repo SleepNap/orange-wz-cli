@@ -5,13 +5,24 @@ import orange.wz.mcp.session.McpSessionManager;
 import orange.wz.mcp.tool.support.BaseSessionTool;
 import orange.wz.mcp.tool.support.ToolParamHelper;
 
+import java.util.List;
 import java.util.Map;
+
+import static orange.wz.mcp.tool.support.ToolSchemas.*;
 
 public final class SaveNodeAsTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public SaveNodeAsTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "将指定文件节点另存为到目标路径。", objectSchema(
+                Map.of(
+                        "rootPath", stringSchema(),
+                        "nodePath", stringSchema(),
+                        "filePath", stringSchema(),
+                        "autoParse", booleanSchema()
+                ),
+                List.of("rootPath", "filePath")
+        ));
         this.service = service;
     }
 

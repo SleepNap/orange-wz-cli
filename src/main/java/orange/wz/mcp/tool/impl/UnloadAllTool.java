@@ -6,11 +6,13 @@ import orange.wz.mcp.tool.support.BaseSessionTool;
 
 import java.util.Map;
 
+import static orange.wz.mcp.tool.support.ToolSchemas.emptyObjectSchema;
+
 public final class UnloadAllTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public UnloadAllTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "卸载当前会话中的全部已加载对象。", emptyObjectSchema());
         this.service = service;
     }
 

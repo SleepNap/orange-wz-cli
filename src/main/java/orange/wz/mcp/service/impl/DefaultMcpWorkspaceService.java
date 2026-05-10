@@ -952,6 +952,9 @@ public final class DefaultMcpWorkspaceService implements McpWorkspaceService {
         boolean autoParse = booleanValue(query.get("autoParse"), true);
         return switch (op) {
             case "find_by_path" -> executeFindByPath(session, query, autoParse, op);
+            case "list_children" -> executeListChildren(session, query, autoParse, op);
+            case "get_detail" -> executeGetDetail(session, query, autoParse, op);
+            case "get_tree" -> executeGetTree(session, query, autoParse, op);
             case "search_by_keyword" -> executeSearchByKeyword(session, query, autoParse, op);
             case "search_by_value" -> executeSearchByValue(session, query, autoParse, op);
             case "match_type" -> executeMatchType(session, query, autoParse, op);
@@ -972,6 +975,37 @@ public final class DefaultMcpWorkspaceService implements McpWorkspaceService {
             result.put("tree", serializeTree(obj, autoParse, maxDepth <= 0 ? Integer.MAX_VALUE : maxDepth, 0));
         }
         return result;
+    }
+
+    private Map<String, Object> executeListChildren(McpSessionState session, Map<String, Object> query, boolean autoParse, String op) {
+        NodeReference reference = nodeReference(query);
+        return Map.of(
+                "op", op,
+                "rootPath", reference.rootPath(),
+                "nodePath", reference.nodePath(),
+                "children", listChildren(session, reference, autoParse)
+        );
+    }
+
+    private Map<String, Object> executeGetDetail(McpSessionState session, Map<String, Object> query, boolean autoParse, String op) {
+        NodeReference reference = nodeReference(query);
+        return Map.of(
+                "op", op,
+                "rootPath", reference.rootPath(),
+                "nodePath", reference.nodePath(),
+                "detail", getNodeDetail(session, reference, autoParse)
+        );
+    }
+
+    private Map<String, Object> executeGetTree(McpSessionState session, Map<String, Object> query, boolean autoParse, String op) {
+        NodeReference reference = nodeReference(query);
+        int maxDepth = integerValue(query.get("maxDepth")) == null ? 0 : integerValue(query.get("maxDepth"));
+        return Map.of(
+                "op", op,
+                "rootPath", reference.rootPath(),
+                "nodePath", reference.nodePath(),
+                "tree", getNodeTreeJson(session, reference, autoParse, maxDepth)
+        );
     }
 
     private Map<String, Object> executeSearchByKeyword(McpSessionState session, Map<String, Object> query, boolean autoParse, String op) {
@@ -1051,6 +1085,9 @@ public final class DefaultMcpWorkspaceService implements McpWorkspaceService {
         if (op != null && !op.isBlank()) {
             return switch (op.trim().toLowerCase(Locale.ROOT)) {
                 case "find_by_path" -> "find_by_path";
+                case "list_children", "children" -> "list_children";
+                case "get_detail", "detail" -> "get_detail";
+                case "get_tree", "tree", "get_node_tree_json" -> "get_tree";
                 case "search_by_keyword", "keyword", "search" -> "search_by_keyword";
                 case "search_by_value", "value" -> "search_by_value";
                 case "match_type", "type" -> "match_type";

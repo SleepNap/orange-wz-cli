@@ -7,11 +7,13 @@ import orange.wz.mcp.tool.support.ToolParamHelper;
 
 import java.util.Map;
 
+import static orange.wz.mcp.tool.support.ToolSchemas.nodeReferenceWithAutoParseSchema;
+
 public final class SaveNodeTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public SaveNodeTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "保存指定文件节点。", nodeReferenceWithAutoParseSchema());
         this.service = service;
     }
 

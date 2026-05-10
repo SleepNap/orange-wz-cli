@@ -7,11 +7,16 @@ import orange.wz.mcp.tool.support.BaseSessionTool;
 import java.util.List;
 import java.util.Map;
 
+import static orange.wz.mcp.tool.support.ToolSchemas.*;
+
 public final class BatchUpdateNodesTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public BatchUpdateNodesTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "兼容批量修改入口；新调用优先使用 mutate_nodes 的 operations 数组。", objectSchema(
+                Map.of("operations", arraySchema(updateOperationSchema())),
+                List.of("operations")
+        ));
         this.service = service;
     }
 

@@ -7,13 +7,24 @@ import orange.wz.mcp.tool.support.BaseSessionTool;
 import orange.wz.mcp.tool.support.ToolParamHelper;
 
 import java.util.Locale;
+import java.util.List;
 import java.util.Map;
+
+import static orange.wz.mcp.tool.support.ToolSchemas.*;
 
 public final class PasteNodesTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public PasteNodesTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "将会话剪贴板内容粘贴到目标节点。", objectSchema(
+                Map.of(
+                        "rootPath", stringSchema(),
+                        "nodePath", stringSchema(),
+                        "strategy", stringSchema(),
+                        "autoParse", booleanSchema()
+                ),
+                List.of("rootPath")
+        ));
         this.service = service;
     }
 

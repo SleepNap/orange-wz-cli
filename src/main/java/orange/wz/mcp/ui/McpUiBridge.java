@@ -60,6 +60,7 @@ public final class McpUiBridge {
             case "query_nodes" -> "MCP 正在执行统一查询...";
             case "get_node_detail" -> "MCP 正在读取节点详情...";
             case "list_children" -> "MCP 正在列出子节点...";
+            case "get_node_tree_json" -> "MCP 正在读取节点树...";
             case "batch_update_nodes", "mutate_nodes" -> "MCP 正在修改节点...";
             default -> "MCP 正在执行 " + toolName + "...";
         };
@@ -96,16 +97,25 @@ public final class McpUiBridge {
                     insertPasted(editPane, (List<Object>) result.get("pasted"), nodeReference(arguments));
                     focusFirstPasted(editPane, result);
                 }
-                case "find_node", "search_node" -> focusNode(editPane, extractNode(result));
-                case "get_node_detail" -> {
+                case "find_node", "search_node" -> {
                     NodeSummary node = extractNode(result);
                     if (node != null) {
                         focusNode(editPane, node);
                     } else {
-                        focusReference(editPane, nodeReference(arguments));
+                        focusFirstNodeFromResultItems(editPane, result);
                     }
                 }
-                case "list_children" -> focusReference(editPane, nodeReference(arguments));
+                case "get_node_detail" -> {
+                    NodeSummary node = extractNode(result);
+                    if (node != null) {
+                        focusNode(editPane, node);
+                    } else if (focusFirstNodeFromResultItems(editPane, result)) {
+                        // Already focused.
+                    } else {
+                        focusFirstReference(editPane, arguments);
+                    }
+                }
+                case "list_children", "get_node_tree_json" -> focusFirstReference(editPane, arguments);
                 case "batch_update_nodes", "mutate_nodes" -> focusFirstUpdated(editPane, result);
                 case "query_nodes" -> focusFirstNodeFromResults(editPane, result);
                 case "save_node", "save_as" -> {
@@ -253,6 +263,7 @@ public final class McpUiBridge {
             case "query_nodes" -> "MCP 统一查询完成";
             case "get_node_detail" -> "MCP 节点详情读取完成";
             case "list_children" -> "MCP 子节点列出完成";
+            case "get_node_tree_json" -> "MCP 节点树读取完成";
             case "batch_update_nodes" -> "MCP 批量修改完成";
             case "mutate_nodes" -> "MCP 统一修改完成";
             default -> "MCP 执行完成";
@@ -260,6 +271,10 @@ public final class McpUiBridge {
     }
 
     private void focusFirstNodeFromResults(EditPane editPane, Map<String, Object> result) {
+        Object rawResult = result.get("result");
+        if (rawResult instanceof Map<?, ?> resultMap && focusFirstNodeFromResultItem(editPane, resultMap)) {
+            return;
+        }
         Object rawResults = result.get("results");
         if (!(rawResults instanceof List<?> results)) {
             return;
@@ -285,7 +300,68 @@ public final class McpUiBridge {
         }
     }
 
+    private boolean focusFirstNodeFromResultItems(EditPane editPane, Map<String, Object> result) {
+        Object rawResults = result.get("results");
+        if (!(rawResults instanceof List<?> results)) {
+            return false;
+        }
+        for (Object item : results) {
+            if (item instanceof Map<?, ?> map && focusFirstNodeFromResultItem(editPane, map)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean focusFirstNodeFromResultItem(EditPane editPane, Map<?, ?> map) {
+        Object matchesObj = map.get("matches");
+        if (matchesObj instanceof List<?> matches && !matches.isEmpty()) {
+            Object first = matches.get(0);
+            if (first instanceof NodeSummary nodeSummary) {
+                focusNode(editPane, nodeSummary);
+                return true;
+            }
+            NodeSummary matchNode = nodeSummary(first);
+            if (matchNode != null) {
+                focusNode(editPane, matchNode);
+                return true;
+            }
+        }
+        Object rawNode = map.get("node");
+        if (rawNode instanceof NodeSummary nodeSummary) {
+            focusNode(editPane, nodeSummary);
+            return true;
+        }
+        NodeSummary mapped = nodeSummary(rawNode);
+        if (mapped != null) {
+            focusNode(editPane, mapped);
+            return true;
+        }
+        Object detail = map.get("detail");
+        if (detail instanceof NodeDetail nodeDetail) {
+            focusNode(editPane, nodeDetail.node());
+            return true;
+        }
+        if (detail instanceof Map<?, ?> detailMap) {
+            NodeSummary detailNode = nodeSummary(detailMap.get("node"));
+            if (detailNode != null) {
+                focusNode(editPane, detailNode);
+                return true;
+            }
+        }
+        NodeReference reference = nodeReference(map);
+        if (reference != null) {
+            focusReference(editPane, reference);
+            return true;
+        }
+        return false;
+    }
+
     private void focusFirstUpdated(EditPane editPane, Map<String, Object> result) {
+        Object rawResult = result.get("result");
+        if (rawResult instanceof Map<?, ?> resultMap && focusFirstNodeFromResultItem(editPane, resultMap)) {
+            return;
+        }
         Object rawResults = result.get("results");
         if (!(rawResults instanceof List<?> results)) {
             return;
@@ -309,6 +385,15 @@ public final class McpUiBridge {
                 focusReference(editPane, reference);
                 return;
             }
+        }
+    }
+
+    private void focusFirstReference(EditPane editPane, Map<String, Object> source) {
+        Set<NodeReference> references = new LinkedHashSet<>();
+        collectNodeReferences(source, references);
+        for (NodeReference reference : references) {
+            focusReference(editPane, reference);
+            return;
         }
     }
 

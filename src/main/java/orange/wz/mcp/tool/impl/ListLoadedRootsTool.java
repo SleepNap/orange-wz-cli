@@ -6,11 +6,13 @@ import orange.wz.mcp.tool.support.BaseSessionTool;
 
 import java.util.Map;
 
+import static orange.wz.mcp.tool.support.ToolSchemas.emptyObjectSchema;
+
 public final class ListLoadedRootsTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public ListLoadedRootsTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "列出当前 MCP 会话已加载的根文件或目录。", emptyObjectSchema());
         this.service = service;
     }
 

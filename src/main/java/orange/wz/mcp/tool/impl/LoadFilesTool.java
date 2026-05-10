@@ -10,11 +10,19 @@ import java.io.File;
 import java.util.List;
 import java.util.Map;
 
+import static orange.wz.mcp.tool.support.ToolSchemas.*;
+
 public final class LoadFilesTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public LoadFilesTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "加载 wz/img/xml 文件或目录到当前 MCP 会话；若目标根已加载则返回错误。", objectSchema(
+                Map.of(
+                        "paths", arraySchema(stringSchema()),
+                        "key", keySchema()
+                ),
+                List.of("paths", "key")
+        ));
         this.service = service;
     }
 

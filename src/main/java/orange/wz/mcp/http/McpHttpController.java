@@ -43,7 +43,6 @@ public final class McpHttpController {
 
     private final ObjectMapper objectMapper;
     private final McpServerBootstrap bootstrap;
-    private final McpToolMetadataRegistry metadataRegistry;
     private final McpSessionManager sessionManager;
     private final McpSseSessionRegistry sseSessionRegistry;
     private final McpUiBridge uiBridge;
@@ -60,13 +59,11 @@ public final class McpHttpController {
     public McpHttpController(
             ObjectMapper objectMapper,
             McpServerBootstrap bootstrap,
-            McpToolMetadataRegistry metadataRegistry,
             McpSseSessionRegistry sseSessionRegistry,
             McpUiBridge uiBridge
     ) {
         this.objectMapper = objectMapper;
         this.bootstrap = bootstrap;
-        this.metadataRegistry = metadataRegistry;
         this.sessionManager = bootstrap.sessionManager();
         this.sseSessionRegistry = sseSessionRegistry;
         this.uiBridge = uiBridge;
@@ -174,7 +171,7 @@ public final class McpHttpController {
                 return JsonRpcResponse.result(id, Map.of());
             }
             if ("tools/list".equals(method)) {
-                return JsonRpcResponse.result(id, Map.of("tools", metadataRegistry.all()));
+                return JsonRpcResponse.result(id, Map.of("tools", toolDescriptors()));
             }
             if ("tools/call".equals(method)) {
                 Map<String, Object> paramMap = asMap(params);
@@ -232,6 +229,12 @@ public final class McpHttpController {
                         "version", serverVersion
                 )
         );
+    }
+
+    private List<McpToolDescriptor> toolDescriptors() {
+        return bootstrap.toolRegistry().all().stream()
+                .map(tool -> new McpToolDescriptor(tool.name(), tool.description(), tool.inputSchema()))
+                .toList();
     }
 
     private Object readId(JsonNode node) {

@@ -1,21 +1,22 @@
 package orange.wz.mcp.tool;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public final class McpToolRegistry {
-    private final Map<String, McpTool> tools = new ConcurrentHashMap<>();
+    private final Map<String, McpTool> tools = new LinkedHashMap<>();
 
-    public void register(McpTool tool) {
+    public synchronized void register(McpTool tool) {
         tools.put(tool.name(), tool);
     }
 
-    public McpTool get(String name) {
+    public synchronized McpTool get(String name) {
         return tools.get(name);
     }
 
-    public Collection<McpTool> all() {
-        return tools.values();
+    public synchronized Collection<McpTool> all() {
+        return List.copyOf(tools.values());
     }
 }

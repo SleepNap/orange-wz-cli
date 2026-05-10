@@ -5,13 +5,22 @@ import orange.wz.mcp.session.McpSessionManager;
 import orange.wz.mcp.tool.support.BaseSessionTool;
 import orange.wz.mcp.tool.support.ToolParamHelper;
 
+import java.util.List;
 import java.util.Map;
+
+import static orange.wz.mcp.tool.support.ToolSchemas.*;
 
 public final class CopyNodesTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public CopyNodesTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "复制一个或多个节点到当前会话剪贴板。", objectSchema(
+                Map.of(
+                        "sources", arraySchema(nodeReferenceSchema()),
+                        "autoParse", booleanSchema()
+                ),
+                List.of("sources")
+        ));
         this.service = service;
     }
 

@@ -7,11 +7,13 @@ import orange.wz.mcp.tool.support.ToolParamHelper;
 
 import java.util.Map;
 
+import static orange.wz.mcp.tool.support.ToolSchemas.nodeReferenceWithAutoParseSchema;
+
 public final class DeleteNodeTool extends BaseSessionTool {
     private final McpWorkspaceService service;
 
     public DeleteNodeTool(McpSessionManager sessionManager, McpWorkspaceService service) {
-        super(sessionManager);
+        super(sessionManager, "删除指定路径的节点。", nodeReferenceWithAutoParseSchema());
         this.service = service;
     }
 
