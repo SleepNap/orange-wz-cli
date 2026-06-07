@@ -8,6 +8,7 @@ import orange.wz.gui.MainFrame;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.ApplicationContext;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Objects;
 
 @Component
+@ConditionalOnProperty(name = "orange.gui.enabled", havingValue = "true")
 public class ServerManager implements ApplicationContextAware, ApplicationRunner, DisposableBean {
     @Getter
     private static ApplicationContext context;
