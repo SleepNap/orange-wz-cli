@@ -4,15 +4,18 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import orange.wz.provider.WzImage;
 import orange.wz.provider.WzObject;
-import orange.wz.provider.audio.*;
 import orange.wz.provider.tools.BinaryReader;
 import orange.wz.provider.tools.BinaryWriter;
-import orange.wz.provider.tools.WzMutableKey;
 import orange.wz.provider.tools.WzType;
 
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 
+/**
+ * 简化版的 sound property —— xml-img-patcher 不会修改 sound 节点，
+ * 只需要解析 + 保存原样字节即可。
+ * 原始实现依赖 javax.sound + mp3spi 解析 mp3/wav 头，本工具去掉这部分依赖，
+ * 把 header 当作字节直通处理。
+ */
 @Slf4j
 public class WzSoundProperty extends WzExtended {
     private static final byte[] soundHeader = new byte[]{
@@ -28,10 +31,8 @@ public class WzSoundProperty extends WzExtended {
     @Getter
     private int lenMs;
     private byte[] header;
-    private boolean headerEncrypted = false; // List.wz, header is encrypted
     private int offset;
     private int soundDataLen;
-    private WaveFormat waveFormat;
 
     public WzSoundProperty(String name, WzObject parent, WzImage wzImage) {
         super(name, WzType.SOUND_PROPERTY, parent, wzImage);
@@ -41,15 +42,14 @@ public class WzSoundProperty extends WzExtended {
         this(name, parent, wzImage);
         this.lenMs = length;
         this.header = header;
-        // this.soundDataLen = soundBytes.length;
         this.soundBytes = soundBytes;
     }
 
+    /**
+     * patcher 不会调用此方法；保留以便外部调用时不至于报 method not found。
+     * 注意：这里只是把字节存起来，并不会重建 wav/mp3 头，因此不要用它替换音频。
+     */
     public void setSound(byte[] soundBytes) {
-        Mp3FileReader reader = new Mp3FileReader(soundBytes);
-        waveFormat = reader.getWaveFormat();
-        lenMs = reader.getLenMs();
-        rebuildHeader();
         this.soundBytes = soundBytes;
     }
 
@@ -63,23 +63,17 @@ public class WzSoundProperty extends WzExtended {
         int wavFormatLen = reader.getByte();
         byte[] waveFormatBytes = reader.getBytes(wavFormatLen);
 
-        header = ByteBuffer.allocate(soundHeaderBytes.length + 1 + waveFormatBytes.length)
-                .put(soundHeaderBytes)
-                .put((byte) wavFormatLen)  // 或者直接使用读取的字节值
-                .put(waveFormatBytes)
-                .array();
-
-        parseWzSoundPropertyHeader(reader.getWzMutableKey(), waveFormatBytes);
+        // 把 soundHeader + length byte + waveFormat 整个作为字节直通保存
+        header = new byte[soundHeaderBytes.length + 1 + waveFormatBytes.length];
+        System.arraycopy(soundHeaderBytes, 0, header, 0, soundHeaderBytes.length);
+        header[soundHeaderBytes.length] = (byte) wavFormatLen;
+        System.arraycopy(waveFormatBytes, 0, header, soundHeaderBytes.length + 1, waveFormatBytes.length);
 
         offset = reader.getPosition();
         soundBytes = reader.getBytes(soundDataLen);
     }
 
     public byte[] getHeader() {
-        if (header == null) {
-            rebuildHeader();
-        }
-
         return header;
     }
 
@@ -106,101 +100,6 @@ public class WzSoundProperty extends WzExtended {
         return soundBytes;
     }
 
-    private void parseWzSoundPropertyHeader(WzMutableKey wzMutableKey, byte[] waveFormatBytes) {
-        if (waveFormatBytes.length < WaveFormat.structSize) {
-            return;
-        }
-
-        // 解析 wave 头信息
-        WaveFormat wavFmt = bytesToWaveStruct(waveFormatBytes);
-        if (WaveFormat.structSize + wavFmt.getExtraSize() != waveFormatBytes.length) {
-            // 尝试用key解密
-            for (int i = 0; i < waveFormatBytes.length; i++) {
-                waveFormatBytes[i] ^= wzMutableKey.get(i);
-            }
-            wavFmt = bytesToWaveStruct(waveFormatBytes);
-
-            if (WaveFormat.structSize + wavFmt.getExtraSize() != waveFormatBytes.length) {
-                log.error("解析音频头失败 {}", getPath());
-                return;
-            }
-            headerEncrypted = true;
-        }
-
-        // 解析 mp3 头信息
-        if (wavFmt.getWaveFormatTag() == WaveFormatEncoding.MPEGLAYER3 && waveFormatBytes.length >= Mp3WaveFormat.structSize) {
-            waveFormat = bytesToMp3WaveStruct(waveFormatBytes);
-        } else if (wavFmt.getWaveFormatTag() == WaveFormatEncoding.PCM) {
-            waveFormat = wavFmt;
-        } else {
-            log.error("未知的 wave 编码 {}", getPath());
-        }
-    }
-
-    public void rebuildHeader() {
-        WzMutableKey wzMutableKey = wzImage.getReader().getWzMutableKey();
-        BinaryWriter writer = new BinaryWriter();
-        writer.putBytes(soundHeader);
-        byte[] wavHeader = mp3StructToBytes((Mp3WaveFormat) waveFormat);
-        if (headerEncrypted) {
-            for (int i = 0; i < wavHeader.length; i++) {
-                wavHeader[i] ^= wzMutableKey.get(i);
-            }
-        }
-        writer.putByte((byte) wavHeader.length);
-        writer.putBytes(wavHeader);
-        header = writer.output();
-    }
-
-    private WaveFormat bytesToWaveStruct(byte[] waveFormatBytes) {
-        BinaryReader reader = new BinaryReader(waveFormatBytes);
-        return WaveFormat.builder()
-                .waveFormatTag(WaveFormatEncoding.valueOf(reader.getShort()))
-                .channels(reader.getShort())
-                .sampleRate(reader.getInt())
-                .averageBytesPerSecond(reader.getInt())
-                .blockAlign(reader.getShort())
-                .bitsPerSample(reader.getShort())
-                .extraSize(reader.getShort())
-                .build();
-    }
-
-    private WaveFormat bytesToMp3WaveStruct(byte[] waveFormatBytes) {
-        BinaryReader reader = new BinaryReader(waveFormatBytes);
-        return Mp3WaveFormat.builder()
-                .waveFormatTag(WaveFormatEncoding.valueOf(reader.getShort()))
-                .channels(reader.getShort())
-                .sampleRate(reader.getInt())
-                .averageBytesPerSecond(reader.getInt())
-                .blockAlign(reader.getShort())
-                .bitsPerSample(reader.getShort())
-                .extraSize(reader.getShort())
-                .id(Mp3WaveFormatId.valueOf(reader.getShort()))
-                .flags(Mp3WaveFormatFlags.valueOf(reader.getInt()))
-                .blockSize(reader.getShort())
-                .framesPerBlock(reader.getShort())
-                .codecDelay(reader.getShort())
-                .build();
-    }
-
-    private byte[] mp3StructToBytes(Mp3WaveFormat waveFormat) {
-        BinaryWriter writer = new BinaryWriter();
-        writer.putShort((short) waveFormat.getWaveFormatTag().getValue());
-        writer.putShort(waveFormat.getChannels());
-        writer.putInt(waveFormat.getSampleRate());
-        writer.putInt(waveFormat.getAverageBytesPerSecond());
-        writer.putShort(waveFormat.getBlockAlign());
-        writer.putShort(waveFormat.getBitsPerSample());
-        writer.putShort(waveFormat.getExtraSize());
-        writer.putShort((short) waveFormat.getId().getValue());
-        writer.putInt(waveFormat.getFlags().getValue());
-        writer.putShort(waveFormat.getBlockSize());
-        writer.putShort(waveFormat.getFramesPerBlock());
-        writer.putShort(waveFormat.getCodecDelay());
-
-        return writer.output();
-    }
-
     @Override
     public void writeValue(BinaryWriter writer) {
         byte[] soundBytes = getSoundBytes(false);
@@ -216,13 +115,10 @@ public class WzSoundProperty extends WzExtended {
     public WzSoundProperty deepClone(WzObject parent) {
         WzSoundProperty clone = new WzSoundProperty(name, parent, null);
         byte[] soundBytes = getSoundBytes(false);
-        clone.soundBytes = Arrays.copyOf(soundBytes, soundBytes.length);
+        clone.soundBytes = soundBytes == null ? null : Arrays.copyOf(soundBytes, soundBytes.length);
         clone.lenMs = lenMs;
-        // clone.header = Arrays.copyOf(header, header.length); // header 需要用key 重新生成
-        clone.headerEncrypted = headerEncrypted;
-        // clone.offset = offset;
+        clone.header = header == null ? null : Arrays.copyOf(header, header.length);
         clone.soundDataLen = soundDataLen;
-        clone.waveFormat = waveFormat.deepCopy();
         return clone;
     }
 }

@@ -3,8 +3,6 @@ package orange.wz.provider;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import orange.wz.exception.BizException;
-import orange.wz.exception.ExceptionEnum;
 import orange.wz.model.Pair;
 import orange.wz.provider.tools.*;
 
@@ -244,7 +242,7 @@ public class WzDirectory extends WzObject {
         try {
             FileTool.createDirectory(p);
         } catch (IOException e) {
-            throw new BizException(ExceptionEnum.INTERNAL_SERVER_ERROR, "目录操作失败: " + p + ", " + e.getMessage());
+            throw new RuntimeException("目录操作失败: " + p + ", " + e.getMessage());
         }
 
         children.getDirectories().forEach(directory -> directory.exportDirectory(p, collector));
@@ -256,7 +254,7 @@ public class WzDirectory extends WzObject {
         try {
             FileTool.createDirectory(p);
         } catch (IOException e) {
-            throw new BizException(ExceptionEnum.INTERNAL_SERVER_ERROR, "目录操作失败: " + p + ", " + e.getMessage());
+            throw new RuntimeException("目录操作失败: " + p + ", " + e.getMessage());
         }
 
         children.getDirectories().forEach(directory -> directory.exportToXml(p, collector));

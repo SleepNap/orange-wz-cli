@@ -3,7 +3,6 @@ package orange.wz.provider.tools;
 import lombok.extern.slf4j.Slf4j;
 import orange.wz.provider.WzImage;
 import orange.wz.provider.WzImageProperty;
-import orange.wz.provider.WzXmlFile;
 import orange.wz.provider.properties.*;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -55,7 +54,7 @@ public final class XmlExport {
     }
 
     public boolean export(Path filePath) {
-        String imgName = image instanceof WzXmlFile xml ? xml.getImgName() : image.getName();
+        String imgName = image.getName();
         mediaFolder = filePath.getParent().resolve("media").resolve(imgName);
         if (meType == MediaExportType.FILE) {
             try {

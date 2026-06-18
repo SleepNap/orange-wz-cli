@@ -10,7 +10,6 @@ public class WzChildrenFolder {
     private final List<WzFolder> folders = Collections.synchronizedList(new ArrayList<>());
     private final List<WzDirectory> wzFiles = Collections.synchronizedList(new ArrayList<>());
     private final List<WzImageFile> wzImages = Collections.synchronizedList(new ArrayList<>());
-    private final List<WzXmlFile> wzXmlFiles = Collections.synchronizedList(new ArrayList<>());
 
     public List<WzFolder> getFolders() {
         synchronized (folders) {
@@ -30,18 +29,11 @@ public class WzChildrenFolder {
         }
     }
 
-    public List<WzXmlFile> getWzXmlFiles() {
-        synchronized (wzXmlFiles) {
-            return new ArrayList<>(wzXmlFiles);
-        }
-    }
-
     public List<WzObject> getAllChildren() {
         List<WzObject> allChildren = new ArrayList<>();
         allChildren.addAll(getFolders());
         allChildren.addAll(getWzFiles());
         allChildren.addAll(getWzImages());
-        allChildren.addAll(getWzXmlFiles());
 
         return allChildren;
     }
@@ -56,10 +48,6 @@ public class WzChildrenFolder {
 
     public void add(WzImageFile wzImage) {
         wzImages.add(wzImage);
-    }
-
-    public void add(WzXmlFile wzXmlFile) {
-        wzXmlFiles.add(wzXmlFile);
     }
 
     public boolean removeFolder(String name) {
@@ -77,12 +65,6 @@ public class WzChildrenFolder {
     public boolean removeWzImageFile(String name) {
         synchronized (wzImages) {
             return wzImages.removeIf(item -> item.getName().equalsIgnoreCase(name));
-        }
-    }
-
-    public boolean removeWzXmlFile(String name) {
-        synchronized (wzXmlFiles) {
-            return wzXmlFiles.removeIf(item -> item.getName().equalsIgnoreCase(name));
         }
     }
 }

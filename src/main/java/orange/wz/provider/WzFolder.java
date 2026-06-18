@@ -46,8 +46,6 @@ public class WzFolder extends WzObject {
             add(wzDirectory);
         } else if (wzObject instanceof WzImageFile wzImg) {
             add(wzImg);
-        } else if (wzObject instanceof WzXmlFile wzXml) {
-            add(wzXml);
         }
     }
 
@@ -63,10 +61,6 @@ public class WzFolder extends WzObject {
         children.add(wzImage);
     }
 
-    public void add(WzXmlFile wzXmlFile) {
-        children.add(wzXmlFile);
-    }
-
     public boolean remove(WzObject wzObject) {
         if (wzObject instanceof WzFolder) {
             return children.removeFolder(wzObject.getName());
@@ -74,8 +68,6 @@ public class WzFolder extends WzObject {
             return children.removeWzFile(wzObject.getName());
         } else if (wzObject instanceof WzImageFile) {
             return children.removeWzImageFile(wzObject.getName());
-        } else if (wzObject instanceof WzXmlFile) {
-            return children.removeWzXmlFile(wzObject.getName());
         }
 
         return false;
@@ -113,10 +105,6 @@ public class WzFolder extends WzObject {
             WzImageFile wzImageFile = new WzImageFile(filename, pathStr, keyBoxName, iv, key);
             children.add(wzImageFile);
             return wzImageFile;
-        } else if (filename.endsWith(".xml")) {
-            WzXmlFile wzXmlFile = new WzXmlFile(filename, pathStr, keyBoxName, iv, key);
-            children.add(wzXmlFile);
-            return wzXmlFile;
         }
 
         return null;
