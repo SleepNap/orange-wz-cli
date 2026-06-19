@@ -39,6 +39,14 @@ public final class PatchCommand implements Callable<Integer> {
     @Option(names = "--iv", defaultValue = "gms", description = "WZ IV：gms（默认） / cms / latest")
     String ivName;
 
+    @Option(names = "--full-xml", description = "完整服务端 XML（diff +++ 那一侧）。当 hunk 上下文不带外层 imgdir 时，"
+            + "用它从行号反查路径栈，避免歧义/找不到节点。")
+    Path fullXml;
+
+    @Option(names = "--full-xml-dir", description = "完整服务端 XML 根目录。会按 diff 文件名自动配对（如 Skill.img.xml.diff "
+            + "→ <dir>/.../Skill.img.xml）。仅当 --full-xml 未指定时生效。")
+    Path fullXmlDir;
+
     @Override
     public Integer call() {
         if (!Files.isRegularFile(inputImg)) {
@@ -52,7 +60,12 @@ public final class PatchCommand implements Callable<Integer> {
 
         List<Change> changes;
         try {
-            changes = new DiffParser().parse(diffFile);
+            Path resolvedFullXml = resolveFullXml(diffFile);
+            if (resolvedFullXml != null && !Files.isRegularFile(resolvedFullXml)) {
+                System.err.println("[warn] 完整 XML 不存在，将不使用路径回退: " + resolvedFullXml);
+                resolvedFullXml = null;
+            }
+            changes = new DiffParser(resolvedFullXml).parse(diffFile);
         } catch (Exception e) {
             System.err.println("[err] diff 解析失败: " + e.getMessage());
             return 3;
@@ -115,5 +128,72 @@ public final class PatchCommand implements Callable<Integer> {
             case "latest" -> new WzKey(3, "latest", WzAESConstant.WZ_LATEST_IV, WzAESConstant.DEFAULT_KEY);
             default -> null;
         };
+    }
+
+    /**
+     * --full-xml 优先；否则用 --full-xml-dir + diff 路径推断目标 xml。
+     *
+     * 推断规则（按可靠度从高到低尝试）：
+     *   1) 用 diff 相对路径（去掉文件名末尾的 .diff）拼到 --full-xml-dir 下；前提是 diff 在 --full-xml-dir 之下、
+     *      或两者共享一段相同的尾部（例如两边都有 wz-zh-CN/Quest.wz/Act.img.xml(.diff)）。
+     *   2) 退而求其次：递归找首个文件名匹配的 xml。这种回退在多个同名 xml 同时存在时（wz/ 和 wz-zh-CN/ 都有 Act.img.xml）
+     *      不可靠，仅在策略 1 没命中时才用，并打印 warn 提示用户用 --full-xml 显式指定。
+     */
+    private Path resolveFullXml(Path diffPath) {
+        if (fullXml != null) return fullXml;
+        if (fullXmlDir == null) return null;
+        if (!Files.isDirectory(fullXmlDir)) {
+            System.err.println("[warn] --full-xml-dir 不是目录: " + fullXmlDir);
+            return null;
+        }
+        String diffName = diffPath.getFileName().toString();
+        if (!diffName.endsWith(".diff")) return null;
+        String xmlName = diffName.substring(0, diffName.length() - ".diff".length());
+
+        // 策略 1：尝试按 diff 完整路径中"与 fullXmlDir 共享的最长尾段"拼出 xml 路径
+        Path absoluteDiff = diffPath.toAbsolutePath().normalize();
+        Path absoluteDir = fullXmlDir.toAbsolutePath().normalize();
+        // 直接尝试 diff 路径里 fullXmlDir 同名段后面的相对部分
+        // 例如 diff = .../diff_20260619/wz-zh-CN/Quest.wz/Act.img.xml.diff
+        //      dir  = .../upgrade_20260619/
+        // 我们想拿到 wz-zh-CN/Quest.wz/Act.img.xml
+        // 做法：从 diff 路径里找出和 dir 平级的兄弟根（diff_xxx 的兄弟是 upgrade_xxx），
+        // 然后把 diff_xxx 后面的相对路径整段挪过来。
+        Path diffParent = absoluteDiff.getParent();
+        if (diffParent != null) {
+            // 在 diff 路径里找一个分量名与 fullXmlDir 末段"同根名兄弟"的位置：
+            // 简化策略——直接从根往叶尝试每一个后缀子路径，看能不能在 fullXmlDir 下找到对应文件
+            int n = absoluteDiff.getNameCount();
+            for (int i = 0; i < n; i++) {
+                Path tail = absoluteDiff.subpath(i, n);
+                // 把 .diff 后缀去掉
+                String tailStr = tail.toString().replace('\\', '/');
+                if (tailStr.endsWith(".diff")) {
+                    tailStr = tailStr.substring(0, tailStr.length() - ".diff".length());
+                }
+                Path candidate = absoluteDir.resolve(tailStr);
+                if (Files.isRegularFile(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+
+        // 策略 2：递归找同名 xml；若有多个同名候选，警告并取第一个
+        try (var stream = Files.walk(fullXmlDir)) {
+            var matches = stream
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().equals(xmlName))
+                    .toList();
+            if (matches.isEmpty()) return null;
+            if (matches.size() > 1) {
+                System.err.println("[warn] --full-xml-dir 中有多个 " + xmlName + " 候选（"
+                        + matches.size() + " 个），按 diff 路径无法精确配对，回退取第一个："
+                        + matches.get(0) + "。建议用 --full-xml 显式指定。");
+            }
+            return matches.get(0);
+        } catch (Exception e) {
+            System.err.println("[warn] 在 --full-xml-dir 中查找 " + xmlName + " 失败: " + e.getMessage());
+            return null;
+        }
     }
 }

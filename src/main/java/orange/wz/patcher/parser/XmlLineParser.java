@@ -110,11 +110,49 @@ public final class XmlLineParser {
 
     private static String unescapeXml(String s) {
         if (s.indexOf('&') < 0) return s;
-        return s.replace("&lt;", "<")
+        // 先把已命名实体替换；再处理数字字符引用 &#xHH; / &#NNN;
+        String out = s.replace("&lt;", "<")
                 .replace("&gt;", ">")
                 .replace("&quot;", "\"")
-                .replace("&apos;", "'")
-                .replace("&amp;", "&");
+                .replace("&apos;", "'");
+        out = expandNumericEntities(out);
+        // &amp; 必须最后处理，避免把 &amp;#xD; 这样的双重转义错误展开
+        return out.replace("&amp;", "&");
+    }
+
+    /** 把 &#xHH; / &#NNN; 数字字符引用展开成对应字符。无效引用原样保留。 */
+    private static String expandNumericEntities(String s) {
+        int idx = s.indexOf("&#");
+        if (idx < 0) return s;
+        StringBuilder sb = new StringBuilder(s.length());
+        int prev = 0;
+        while (idx >= 0) {
+            sb.append(s, prev, idx);
+            int semi = s.indexOf(';', idx + 2);
+            if (semi < 0) {
+                prev = idx; break;
+            }
+            String body = s.substring(idx + 2, semi);
+            int code = -1;
+            try {
+                if (!body.isEmpty() && (body.charAt(0) == 'x' || body.charAt(0) == 'X')) {
+                    code = Integer.parseInt(body.substring(1), 16);
+                } else if (!body.isEmpty()) {
+                    code = Integer.parseInt(body);
+                }
+            } catch (NumberFormatException ignored) {
+            }
+            if (code >= 0 && code <= 0x10FFFF) {
+                sb.appendCodePoint(code);
+                prev = semi + 1;
+            } else {
+                sb.append(s, idx, semi + 1);
+                prev = semi + 1;
+            }
+            idx = s.indexOf("&#", prev);
+        }
+        sb.append(s, prev, s.length());
+        return sb.toString();
     }
 
     /**

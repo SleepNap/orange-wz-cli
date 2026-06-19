@@ -45,3 +45,16 @@ build/
 config.ini
 /desktop/
 /plan/
+
+# 本地测试产物（patched img、导出 xml、对照结果），由 test-out/run-all.sh 等脚本生成；
+# 留下 *.sh / *.py 这些可重用的测试脚本本身。
+/test-out/patched/
+/test-out/xml/
+/test-out/xml2/
+/test-out/log/
+/test-out/cmp/
+/test-out/verify/
+/test-out/src/
+/test-out/tmp-*
+/test-out/*.tmp.txt
+/test-out/*.class

@@ -12,8 +12,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 解析 git unified diff，把对服务端 XML 的变更展开成 List&lt;Change&gt;。
@@ -26,15 +29,33 @@ import java.util.List;
  *   - `-` 行只影响 leftStack
  *   - `+` 行只影响 rightStack
  *
- * Hunk 整段一次处理：按行号顺序扫描，维护两个栈，同时把"待发出"的 -/+ 行
- * 按近邻聚合后做 MODIFY 配对、容器吸收，最终生成有序的 Change 列表。
- *
- * 容器吸收（imgdir 块）允许跨 context 行：右文档结构变化里 `+&lt;imgdir name="X"&gt;` 的
- * 配对 `&lt;/imgdir&gt;` 可能出现在某个 context 行中——这种情况下 context 同时关闭左右栈，
- * 我们仍把整段视为新增容器子树，并把其中包含的 +/context 子节点都作为子树的一部分。
+ * 当 hunk 上下文里没有外层容器开标签（短 hunk 切在 imgdir 中部）时，rightStack 会一直空，
+ * 解析出来的 path 就是单层叶子名，到 .img 里多解或找不到。fullXml 参数可选地指向"完整服务端 XML"
+ * （diff 的 +++ 那一侧的最终文件），parser 用 hunk header 的 +N 行号去那个 XML 文件里扫出
+ * 第 N-1 行所属的 imgdir 嵌套栈，作为该 hunk 的起始栈，从而恢复完整路径。
  */
 @Slf4j
 public final class DiffParser {
+
+    private static final Pattern HUNK_HEADER = Pattern.compile("^@@\\s+-(\\d+)(?:,\\d+)?\\s+\\+(\\d+)(?:,\\d+)?\\s+@@");
+
+    private final List<String> fullXmlLines; // null 表示未提供
+
+    public DiffParser() {
+        this(null);
+    }
+
+    public DiffParser(Path fullXml) {
+        if (fullXml != null) {
+            try {
+                this.fullXmlLines = Files.readAllLines(fullXml, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new RuntimeException("读取完整 XML 失败: " + fullXml + " — " + e.getMessage(), e);
+            }
+        } else {
+            this.fullXmlLines = null;
+        }
+    }
 
     public List<Change> parse(Path diffFile) throws IOException {
         List<String> lines = Files.readAllLines(diffFile, StandardCharsets.UTF_8);
@@ -48,13 +69,15 @@ public final class DiffParser {
         while (i < lines.size()) {
             String line = lines.get(i);
             if (line.startsWith("@@ ")) {
+                int newLineStart = parseHunkNewStart(line);
                 int hunkStart = i + 1;
                 int hunkEnd = hunkStart;
                 while (hunkEnd < lines.size() && !lines.get(hunkEnd).startsWith("@@ ")
                         && !lines.get(hunkEnd).startsWith("diff --git")) {
                     hunkEnd++;
                 }
-                processHunk(lines.subList(hunkStart, hunkEnd), hunkStart, changes);
+                List<String> seed = newLineStart > 0 ? seedStackFromFullXml(newLineStart) : Collections.emptyList();
+                processHunk(lines.subList(hunkStart, hunkEnd), hunkStart, seed, changes);
                 i = hunkEnd;
                 continue;
             }
@@ -64,10 +87,52 @@ public final class DiffParser {
         return changes;
     }
 
-    private void processHunk(List<String> hunkLines, int firstLineNumber, List<Change> out) {
+    private static int parseHunkNewStart(String headerLine) {
+        Matcher m = HUNK_HEADER.matcher(headerLine);
+        if (!m.find()) return -1;
+        try {
+            return Integer.parseInt(m.group(2));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * 用完整 XML 文件的前 (newLineStart - 1) 行重建 imgdir 栈。
+     * 仅看 imgdir 的开/关：开标签压栈，闭标签出栈，自闭合不动栈。
+     * 返回栈底→栈顶的列表（即根→当前 imgdir 路径）。
+     */
+    private List<String> seedStackFromFullXml(int newLineStart) {
+        if (fullXmlLines == null) return Collections.emptyList();
+        Deque<String> stack = new ArrayDeque<>();
+        int upTo = Math.min(newLineStart - 1, fullXmlLines.size());
+        for (int idx = 0; idx < upTo; idx++) {
+            String raw = fullXmlLines.get(idx);
+            String trimmed = raw.stripLeading();
+            XmlLineParser.ParsedLine parsed = XmlLineParser.parse(trimmed);
+            if (parsed == null) continue;
+            applyStructuralRaw(stack, parsed);
+        }
+        // ArrayDeque 的迭代顺序是栈顶 → 栈底；我们要根 → 叶
+        List<String> reversed = new ArrayList<>(stack.size());
+        for (String s : stack) reversed.add(s);
+        java.util.Collections.reverse(reversed);
+        return reversed;
+    }
+
+    private void processHunk(List<String> hunkLines, int firstLineNumber, List<String> seedPath, List<Change> out) {
         // 把 hunk 内每一行解析成 (kind, parsed, lineNumber)，并预先算好 leftPath 和 rightPath
         Deque<String> leftStack = new ArrayDeque<>();
         Deque<String> rightStack = new ArrayDeque<>();
+        // seedPath 是根→叶顺序（如 [Skill.img, 0001005]）。
+        // 第一个元素是文件根 <imgdir name="X.img">，对应 WzImage 自身，不出现在内部节点路径里 → 跳过。
+        // 栈的约定是 head=最深、tail=根，所以按 root→leaf 顺序逐个 push：
+        //   push(root) → [root]
+        //   push(child) → [child, root]   ← head=child=最深 ✓
+        for (int s = 1; s < seedPath.size(); s++) {
+            leftStack.push(seedPath.get(s));
+            rightStack.push(seedPath.get(s));
+        }
 
         List<HunkRow> rows = new ArrayList<>(hunkLines.size());
         for (int idx = 0; idx < hunkLines.size(); idx++) {

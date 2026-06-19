@@ -245,6 +245,16 @@ public final class XmlExport {
                 case '>':
                     sb.append("&gt;");
                     break;
+                case '\r':
+                    // attr value 中的 0x0D 必须转义为 &#xD;，否则 XML 解析器会按规范把它归一化成空格
+                    sb.append("&#xD;");
+                    break;
+                case '\n':
+                    sb.append("&#xA;");
+                    break;
+                case '\t':
+                    sb.append("&#x9;");
+                    break;
                 default:
                     sb.append(c);
             }
