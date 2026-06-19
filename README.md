@@ -108,6 +108,108 @@ mvn -DskipTests package
 
 Windows 用户：项目根的 `build.bat` 是封装好的一键构建。
 
+## 开发与测试
+
+这一节记录本工具做了什么、设计思路、产物清单、以及怎么复现测试。
+
+### 做了什么
+
+把原 OrzRepacker（Spring Boot GUI + MCP HTTP 服务）改造成一个纯 CLI 工具 `xml-img-patcher`，只做一件事：**把 git unified diff 里的节点变更应用到客户端 `.img`，不重建文件、不丢二进制资源**。
+
+- 砍掉 Spring Boot / Swing GUI / MCP HTTP 那一套
+- 引入 `picocli 4.7.6`，主类 `orange.wz.patcher.Main`，子命令 `patch` / `export-xml`
+- 保留并复用 `orange.wz.provider.*`（v83 散文件 img 读写内核：WzKey/AES、WzImage 解析、节点增删改、Canvas/PNG/Sound/UOL/Vector 完整保留）
+- 新增 `patcher/parser/DiffParser`、`patcher/parser/XmlLineParser`、`patcher/patch/ImgPatcher` 三件套
+- `maven-shade-plugin` 出 fat jar
+
+### 设计思路
+
+```
+diff (git unified)  ──┐
+                      ├──► DiffParser ──► List<Change{op, path[], type, value, subTree}>
+完整服务端 XML       ──┘     ▲                │
+(--full-xml)                   │ 行号回查      │ 按路径定位
+seed hunk 起始 imgdir 栈       │               ▼
+                          ImgPatcher ──► WzImage 原地改节点 ──► 写回 .img
+```
+
+三个输入各司其职：
+
+| 输入 | 角色 |
+|---|---|
+| **diff** | 唯一真理来源：改哪个节点、改成什么值。hunk 头给行号、`+/-` 行给值 |
+| **完整服务端 XML**（可选 `--full-xml`/`--full-xml-dir`）| 路径字典：当 hunk 上下文不带外层 `<imgdir>` 时，用 hunk 头的 `+N` 行号到 XML 里扫前 N−1 行重建 imgdir 嵌套栈，恢复完整路径 |
+| **`.img`** | 唯一被读写的对象：按解出来的路径 `getChild` 精确取节点，原地改值，原样写回 |
+
+DiffParser 维护 left/right 两份 imgdir 栈（`-` 行只动 left、`+` 行只动 right、context 行共同前进），按近邻聚合把 `-/+` 配成 MODIFY、剩余 `-` 成 DELETE、剩余 `+` 成 ADD（容器开标签会吸收到匹配 `</imgdir>`，整棵子树作为一个 SubTree 加进去）。
+
+ImgPatcher 拿到 `List<Change>` 后逐条应用：MODIFY 按路径取节点改值；ADD 找父节点挂子树，若节点已存在则 merge（不覆盖客户端更完整的既有值）；DELETE 幂等。`-` `--dry-run` 不写盘，`--strict` 失败即停。
+
+### 修过的 bug（开发中实测发现）
+
+1. **`XmlLineParser.unescapeXml` 不认数字字符引用**：`&#xD;` `&#xA;` 这类被当字面 6 字符存进 `.img`，导致中文长文本里的换行错乱。补上 `expandNumericEntities` 展开 `&#xHH;` / `&#NNN;`。
+2. **`XmlExport.escapeText` 不转义 `\r \n \t`**：attr value 里的字面 `\r\n` 会被 XML 解析器按规范归一化为空格，丢失换行语义。补上 `&#xD;` `&#xA;` `&#x9;` 转义。
+3. **DiffParser seed 栈 push 顺序**（`--full-xml` 引入时自造的）：`ArrayDeque.push` 是头插，要按 root→leaf 顺序逐个 push 才能让 head=最深；最早写反了导致兄弟节点被错误嵌套。同时 seed 要跳过文件根 `<imgdir name="X.img">`（对应 WzImage 自身，不在内部节点路径里）。
+
+### 产物清单
+
+```
+.
+├── pom.xml                              # picocli + shade fat jar
+├── build.bat                            # 一键 mvn package
+├── xml-img-patcher.bat                  # 启动包装（加进 PATH 后直接 xml-img-patcher ...）
+├── README.md                            # 本文档
+├── xml-img-patcher-plan.md              # 原始设计/调研文档
+├── src/main/java/orange/wz/
+│   ├── patcher/
+│   │   ├── Main.java                    # picocli 入口
+│   │   ├── PatchCommand.java            # patch 子命令 + --full-xml / --full-xml-dir
+│   │   ├── ExportXmlCommand.java        # export-xml 子命令
+│   │   ├── model/                       # Change / ChangeOp / SubTree / ValueType
+│   │   ├── parser/
+│   │   │   ├── DiffParser.java          # unified diff → List<Change>，含 seed 栈
+│   │   │   └── XmlLineParser.java       # 单行 XML 解析 + 实体反转义
+│   │   └── patch/ImgPatcher.java        # Change 应用到 WzImage + 后缀回退
+│   └── provider/                        # v83 img 读写内核（保留）
+└── test-out/                            # 测试套件（脚本入仓，产物被 gitignore）
+    ├── run-all.sh                       # 跑全部 20 个 case 的 patch+export
+    ├── compare.sh                       # patched xml vs upgrade xml 行级对比
+    ├── verify-hunks.sh                  # diff hunk 行级生效检查
+    └── verify-paths.py                  # 路径敏感的节点级正确性验证（主验证器）
+```
+
+### 怎么复现测试
+
+前置数据（放桌面，路径在脚本里硬编码，按需改）：
+
+```
+C:\Users\CN\Desktop\diff_20260619\        # 20 个 .img.xml.diff（wz/ 10 个 + wz-zh-CN/ 10 个）
+C:\Users\CN\Desktop\upgrade_20260619\     # 对应的完整服务端 XML（--full-xml-dir 指向它）
+E:\LocalGit\GitHub\BeiDou-Client\         # 客户端 .img 源（EN/ 英文、Data/ 中文）
+```
+
+1. 把源 `.img` 拷到 `test-out/src/` 下（按 `wz/→EN 优先 fallback Data`、`wz-zh-CN/→Data` 映射，**不污染原 img**）
+2. 跑全量：
+
+   ```bash
+   mvn -DskipTests package                 # 出 fat jar
+   bash test-out/run-all.sh                # patch 全部 + export-xml，日志在 test-out/log/
+   # 再把 patched img 统一 export 成 2 空格 LF 的 xml 便于对比
+   for img in $(find test-out/patched -name "*.img"); do
+     rel="${img#test-out/patched/}"
+     java -jar target/xml-img-patcher.jar export-xml "$img" "test-out/xml2/${rel%.img}.xml" --indent 2 --linux
+   done
+   python -X utf8 test-out/verify-paths.py  # 路径敏感验证，输出每个 case 的 pass/fail
+   ```
+
+### 测试结果（最近一次）
+
+| 维度 | 结果 |
+|---|---|
+| patcher 自报 | **20 / 20 case、4991 / 4991 changes、0 failed** |
+| verify-paths 节点级验证 | 除 `zh_Quest_Say` 23 条 `STILL_OLD`（已确认是验证器局限——"删了重写但值未变"，patched 节点值与 upgrade XML 逐一对照一致）外，**全部 PASS** |
+| 抽样真值 | zh Mob `9999999/name=已杀怪物数`、en Mob `9999999/name=Hunted Monsters`、zh Skill `0001005/desc` 冷却 2 小时→300 秒、en 0403 新增 `04031786` 子树、en Skill/000 深路径新增 `0001005/level/1/cooltime=300` —— 全部正确 |
+
 ## 已知限制
 
 - **hunk 上下文极短且叶子名在文件中不唯一时**会失败（如 `String.wz/Skill.img` 里 `desc` 出现 600+ 次，hunk 起始切在 imgdir 中部、没有外层 `<imgdir>` 标签可依据）。**解决方法：传 `--full-xml` 或 `--full-xml-dir`**，工具会从 hunk header 的行号反查完整路径，规避此问题。
