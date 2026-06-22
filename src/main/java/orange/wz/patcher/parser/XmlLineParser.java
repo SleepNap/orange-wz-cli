@@ -25,7 +25,16 @@ public final class XmlLineParser {
 
     public static ParsedLine parse(String trimmed) {
         if (trimmed.isEmpty()) return null;
-        if (!trimmed.startsWith("<")) return null;
+        // 容错：服务端 diff 偶发会输出残缺的 `-` 行——开头少一个 `<`，例如
+        //   `string name="h1" value="..."/>`
+        // 这里把它当成正常 `<string ...>` 处理，让 MODIFY 配对能匹配上对应的 `+` 行。
+        if (!trimmed.startsWith("<")) {
+            if (looksLikeMalformedLeaf(trimmed)) {
+                trimmed = "<" + trimmed;
+            } else {
+                return null;
+            }
+        }
         if (trimmed.startsWith("<?")) return null;
 
         if (trimmed.startsWith("</")) {
@@ -64,6 +73,19 @@ public final class XmlLineParser {
             // canvas / sound / convex 等服务端 XML 不应出现于 diff 改动中；遇到当作不支持
             default -> ValueType.UNSUPPORTED;
         };
+    }
+
+    /**
+     * 判定残缺开头 `<` 的行是否仍像一个合法的 self-closing 叶子。
+     * 形如 `string name="h1" value="..."/>` —— 以已知 tag 名打头、有 name= 属性、以 `/>` 结尾。
+     */
+    private static boolean looksLikeMalformedLeaf(String s) {
+        if (!s.endsWith("/>")) return false;
+        int sp = indexOfAny(s, 0, " \t/>");
+        if (sp <= 0) return false;
+        String tag = s.substring(0, sp);
+        if (tagToType(tag) == ValueType.UNSUPPORTED) return false;
+        return s.indexOf(" name=\"") >= 0 || s.startsWith("name=\"");
     }
 
     private static int indexOfAny(String s, int from, String chars) {

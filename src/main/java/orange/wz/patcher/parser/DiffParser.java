@@ -77,7 +77,13 @@ public final class DiffParser {
                     hunkEnd++;
                 }
                 List<String> seed = newLineStart > 0 ? seedStackFromFullXml(newLineStart) : Collections.emptyList();
-                processHunk(lines.subList(hunkStart, hunkEnd), hunkStart, seed, changes);
+                // 服务端导出 diff 时偶尔会把含有字面 `\n` 的 value 字段写成跨多行的 - 或 + 块（例如
+                //   -    <string name="0" value="...long text
+                //   -"/>
+                // ）。这种行会让 XmlLineParser 在第二行解析失败，导致 left/right 栈错位、
+                // 后续同 hunk 的 ADD/MODIFY 全部路径错位。这里在喂给 processHunk 之前先把它们合成单行。
+                List<String> merged = mergeContinuedValueLines(lines.subList(hunkStart, hunkEnd));
+                processHunk(merged, hunkStart, seed, changes);
                 i = hunkEnd;
                 continue;
             }
@@ -85,6 +91,70 @@ public final class DiffParser {
         }
 
         return changes;
+    }
+
+    /**
+     * 把 hunk 行里被字面换行截断的 value 重新合成单行。
+     * 同 prefix（' ' / '-' / '+'）的连续行里，若前一行打开了 value="…… 但没闭合，
+     * 把下一行的 body 追加进来（用真实换行 \n 连接），直到看见闭合的 `"`。
+     */
+    private List<String> mergeContinuedValueLines(List<String> hunk) {
+        List<String> out = new ArrayList<>(hunk.size());
+        StringBuilder buf = null;
+        char carry = 0;
+        for (String line : hunk) {
+            if (line.isEmpty()) {
+                if (buf != null) {
+                    // 字面换行刚好对应一空行，按真实换行接上
+                    buf.append('\n');
+                    continue;
+                }
+                out.add(line);
+                continue;
+            }
+            char prefix = line.charAt(0);
+            if (buf != null) {
+                if (prefix != carry) {
+                    // prefix 不一致：放弃合并，把已积累的吐出去再重新处理当前行
+                    out.add(buf.toString());
+                    buf = null;
+                    carry = 0;
+                } else {
+                    String body = line.length() > 1 ? line.substring(1) : "";
+                    buf.append('\n').append(body);
+                    if (isValueAttrClosed(buf.substring(1))) {
+                        out.add(buf.toString());
+                        buf = null;
+                        carry = 0;
+                    }
+                    continue;
+                }
+            }
+            if (prefix == ' ' || prefix == '-' || prefix == '+') {
+                String body = line.substring(1);
+                if (hasUnclosedValueAttr(body)) {
+                    buf = new StringBuilder(line);
+                    carry = prefix;
+                    continue;
+                }
+            }
+            out.add(line);
+        }
+        if (buf != null) out.add(buf.toString());
+        return out;
+    }
+
+    /** 行内 value="…… 没有以 " 闭合。判断方式：找到第一个 value="，看后面有没有未转义的 "。 */
+    private static boolean hasUnclosedValueAttr(String body) {
+        int idx = body.indexOf("value=\"");
+        if (idx < 0) return false;
+        int end = body.indexOf('"', idx + 7);
+        return end < 0;
+    }
+
+    /** 合并后的 body 是否已经把 value 引号闭合。 */
+    private static boolean isValueAttrClosed(String body) {
+        return !hasUnclosedValueAttr(body);
     }
 
     private static int parseHunkNewStart(String headerLine) {
@@ -200,6 +270,27 @@ public final class DiffParser {
             if (m.prefix() != '-') continue;
             if (m.parsed() == null || m.parsed().closing()) continue;
             if (m.parsed().name() == null) continue;
+            // 同 hunk 内若有 + 行重建同名节点（rename 形态：先 - 一个容器开标签，再 +
+            // 同名容器在新父下，例如 wz/Quest.wz/Act.img 的 29509 → 29580/29509），
+            // 跳过这条 DELETE。否则会把后续 ADD 子树连根铲掉，造成节点丢失。
+            String deletedName = m.parsed().name();
+            boolean reborn = false;
+            for (int qi = 0; qi < rows.size(); qi++) {
+                if (used[qi]) continue;
+                HunkRow q = rows.get(qi);
+                if (q.prefix() != '+') continue;
+                if (q.parsed() == null || q.parsed().closing()) continue;
+                if (deletedName.equals(q.parsed().name())
+                        && matchesContainerOpen(q.parsed().tag())
+                        && matchesContainerOpen(m.parsed().tag())) {
+                    reborn = true;
+                    break;
+                }
+            }
+            if (reborn) {
+                used[mi] = true;
+                continue;
+            }
             List<String> path = new ArrayList<>(m.leftPath());
             path.add(m.parsed().name());
             out.add(new Change(
@@ -303,12 +394,17 @@ public final class DiffParser {
                 // 嵌套容器开
                 SubTree child = new SubTree(q.parsed().name(), ValueType.SUB, null, null, null);
                 if (!subStack.isEmpty()) subStack.peek().addChild(child);
-                subStack.push(child);
-                depth++;
                 if (q.prefix() == '+') {
                     used[qi] = true;
                     lastConsumed = qi;
                 }
+                // 自闭合容器（<imgdir name="0"/>）作为空容器一次到位，不入栈也不加深 depth
+                if (q.parsed().selfClose()) {
+                    qi++;
+                    continue;
+                }
+                subStack.push(child);
+                depth++;
                 qi++;
             }
 

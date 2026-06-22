@@ -186,12 +186,27 @@ public final class ImgPatcher {
         String name = c.path().get(c.path().size() - 1);
         WzObject existing = childByName(parent, name);
         if (existing != null) {
-            // 节点已存在（客户端 .img 通常比服务端 XML 更全，diff 看似新增、实际已有）。
-            // 把整棵子树 merge 进去：缺失的子节点新建，已存在的递归合并；不覆盖叶子值。
-            if (c.subTree() != null) {
-                mergeSubTree(existing, c.subTree());
+            // 节点已存在。diff 的 + 行权威：若类型相同就直接覆盖叶子值，容器则递归 upsert（缺失子节点新建、
+            // 同名叶子覆盖、同名容器再递归）。这样能正确处理两类常见 case：
+            //   - 服务端因生成器残缺把 MODIFY 写成 -行残缺/+完整（如 `string name=h1` 少了 <），
+            //     MODIFY 配对失败 → 退化为 ADD 叶子，必须覆盖才能拿到新值。
+            //   - 客户端 .img 已有外层容器，但 + 行往里塞了新字段（如 8232 加 parent/order），
+            //     既要新增缺失字段也要覆盖已存在字段（diff 的 + 是最新真相）。
+            if (c.subTree() != null && c.type() == ValueType.SUB) {
+                upsertSubTree(existing, c.subTree());
+            } else if (c.type() != ValueType.SUB) {
+                // 叶子 ADD 命中已存在节点：类型匹配则覆盖，类型不同则替换。
+                if (matchesType(existing, c.type())) {
+                    applyValue(existing, c);
+                    markChanged(existing);
+                } else {
+                    // 类型变了：删旧的、加新的
+                    removeChild(parent, name);
+                    WzImageProperty newNode = buildLeaf(name, c.type(), c.value(), c.x(), c.y(), img);
+                    addChild(parent, newNode);
+                    markChanged(newNode);
+                }
             }
-            // 若是叶子 ADD 且节点已存在，且类型相符，则不动（不覆盖既有值）
             return;
         }
         WzImageProperty newNode;
@@ -205,25 +220,61 @@ public final class ImgPatcher {
     }
 
     /**
-     * 把 SubTree 合并到已有节点：
-     * - SubTree 是容器：existing 也应是容器（WzListProperty/WzImage），递归 merge 子节点
-     * - SubTree 是叶子：什么都不做（不覆盖既有值，因为客户端原值通常更完整）
+     * 把 SubTree upsert 到已有容器：
+     * - 缺失的子节点新建并加入
+     * - 同名叶子按类型覆盖值（diff 的 + 是最新真相）
+     * - 同名容器递归 upsert
+     * 不再像旧的 mergeSubTree 那样跳过叶子覆盖。
      */
-    private void mergeSubTree(WzObject existing, SubTree tree) {
+    private void upsertSubTree(WzObject existing, SubTree tree) {
         if (tree.type() != ValueType.SUB) {
-            // 叶子：不覆盖
+            // 叶子：覆盖 existing 自身的值
+            if (matchesType(existing, tree.type())) {
+                applyLeafFromSubTree(existing, tree);
+                markChanged(existing);
+            }
             return;
         }
         for (SubTree child : tree.children()) {
             WzObject existingChild = childByName(existing, child.name());
             if (existingChild != null) {
-                mergeSubTree(existingChild, child);
+                if (child.type() == ValueType.SUB) {
+                    upsertSubTree(existingChild, child);
+                } else if (matchesType(existingChild, child.type())) {
+                    applyLeafFromSubTree(existingChild, child);
+                    markChanged(existingChild);
+                } else {
+                    // 类型变了：删后重建
+                    removeChild(existing, child.name());
+                    WzImageProperty newNode = buildFromSubTree(child, getWzImage(existing));
+                    addChild(existing, newNode);
+                    markChanged(newNode);
+                }
                 continue;
             }
             // 缺失：新建并加入
             WzImageProperty newNode = buildFromSubTree(child, getWzImage(existing));
             addChild(existing, newNode);
             markChanged(newNode);
+        }
+    }
+
+    /** 用 SubTree 的叶子值覆盖 existing 节点。调用方保证类型匹配。 */
+    private void applyLeafFromSubTree(WzObject existing, SubTree tree) {
+        switch (existing) {
+            case WzStringProperty p -> p.setValue(tree.value() == null ? "" : tree.value());
+            case WzIntProperty p -> p.setValue(parseInt(tree.value()));
+            case WzShortProperty p -> p.setValue(parseShort(tree.value()));
+            case WzLongProperty p -> p.setValue(parseLong(tree.value()));
+            case WzFloatProperty p -> p.setValue(parseFloat(tree.value()));
+            case WzDoubleProperty p -> p.setValue(parseDouble(tree.value()));
+            case WzUOLProperty p -> p.setValue(tree.value() == null ? "" : tree.value());
+            case WzVectorProperty p -> {
+                if (tree.x() != null) p.setX(tree.x());
+                if (tree.y() != null) p.setY(tree.y());
+            }
+            case WzNullProperty p -> { /* null 节点无值 */ }
+            default -> { /* 不支持的类型保持不变 */ }
         }
     }
 
