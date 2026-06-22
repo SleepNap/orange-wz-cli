@@ -35,7 +35,7 @@ public final class PatchCommand implements Callable<Integer> {
     @Option(names = "--strict", description = "任何一条 change 失败立即中止")
     boolean strict;
 
-    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS（默认） / EMS / BMS / CLASSIC（大小写不敏感）")
+    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS（默认） / EMS / BMS / CLASSIC（大小写不敏感；cms/latest 为兼容旧版的别名）")
     String ivName;
 
     @Option(names = "--full-xml", description = "完整服务端 XML（diff +++ 那一侧）。当 hunk 上下文不带外层 imgdir 时，"
@@ -56,6 +56,12 @@ public final class PatchCommand implements Callable<Integer> {
             System.err.println("[err] diff 文件不存在: " + diffFile);
             return 2;
         }
+        // IV 校验提前：无论 --full-xml 是否存在都要一致非 0 退出
+        WzKey key = IvSupport.resolve(ivName);
+        if (key == null) {
+            System.err.println("[err] 未知 IV: " + ivName + "（支持 GMS / EMS / BMS / CLASSIC；cms/latest 为兼容别名）");
+            return 2;
+        }
 
         List<Change> changes;
         try {
@@ -69,28 +75,13 @@ public final class PatchCommand implements Callable<Integer> {
             System.err.println("[err] diff 解析失败: " + e.getMessage());
             return 3;
         }
-        System.out.println("[parse] " + changes.size() + " changes from diff");
-
         if (changes.isEmpty()) {
-            try {
-                if (!dryRun && !inputImg.toAbsolutePath().equals(outputImg.toAbsolutePath())) {
-                    Files.createDirectories(outputImg.toAbsolutePath().getParent());
-                    Files.copy(inputImg, outputImg, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                }
-                long size = Files.size(outputImg.toAbsolutePath().equals(inputImg.toAbsolutePath()) ? inputImg : outputImg);
-                System.out.println("0 applied, 0 failed. Output: " + outputImg + " (" + size + " bytes)");
-                return 0;
-            } catch (Exception e) {
-                System.err.println("[err] 复制 img 失败: " + e.getMessage());
-                return 5;
-            }
+            // 空 diff 通常是：传了非 diff 文件、空文件、或 diff 里根本没有 hunk。
+            // 不写输出、不"假成功"，按 README 退出 3。
+            System.err.println("[err] diff 解析失败: 未解析到任何变更（文件不是 unified diff、为空、或无 hunk）");
+            return 3;
         }
-
-        WzKey key = IvSupport.resolve(ivName);
-        if (key == null) {
-            System.err.println("[err] 未知 IV: " + ivName + "（支持 GMS / EMS / BMS / CLASSIC）");
-            return 2;
-        }
+        System.out.println("[parse] " + changes.size() + " changes from diff");
 
         ImgPatcher patcher = new ImgPatcher(key, strict, verbose);
         ImgPatcher.Result result = patcher.patch(inputImg, changes, outputImg, dryRun);
@@ -108,14 +99,17 @@ public final class PatchCommand implements Callable<Integer> {
             return 1;
         }
 
-        long size;
-        try {
-            size = dryRun ? Files.size(inputImg) : Files.size(outputImg);
-        } catch (Exception e) {
-            size = -1;
+        if (dryRun) {
+            System.out.println(result.applied() + " applied, " + result.failed() + " failed. (dry-run, not written)");
+        } else {
+            long size;
+            try {
+                size = Files.size(outputImg);
+            } catch (Exception e) {
+                size = -1;
+            }
+            System.out.println(result.applied() + " applied, " + result.failed() + " failed. Output: " + outputImg + " (" + size + " bytes)");
         }
-        String suffix = dryRun ? " (dry-run, not written)" : "";
-        System.out.println(result.applied() + " applied, " + result.failed() + " failed. Output: " + outputImg + " (" + size + " bytes)" + suffix);
 
         if (result.failed() > 0) return 1;
         return 0;

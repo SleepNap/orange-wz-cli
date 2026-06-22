@@ -45,7 +45,7 @@ public final class BatchCommand implements Callable<Integer> {
     @Option(names = "--strict", description = "任一变更失败立即中止整批")
     boolean strict;
 
-    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS / EMS / BMS / CLASSIC")
+    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS / EMS / BMS / CLASSIC（大小写不敏感；cms/latest 为兼容别名）")
     String ivName;
 
     @Option(names = "--full-xml-dir", description = "完整服务端 XML 根目录（按 diff 路径自动配对）")

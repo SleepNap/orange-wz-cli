@@ -83,6 +83,7 @@ public final class XmlExport {
             image.getChildren().forEach(prop -> writeProp(prop, ""));
             curIndent--;
             writer.write("</imgdir>");
+            writeLineSeparator();
             writer.flush();
         } catch (IOException e) {
             throw new RuntimeException(e);

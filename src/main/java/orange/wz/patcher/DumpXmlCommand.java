@@ -24,7 +24,7 @@ public final class DumpXmlCommand implements Callable<Integer> {
     @Parameters(index = "1", description = "输出 .xml 文件")
     Path outputXml;
 
-    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS / EMS / BMS / CLASSIC（大小写不敏感）")
+    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS / EMS / BMS / CLASSIC（大小写不敏感；cms/latest 为兼容别名）")
     String ivName;
 
     @Option(names = "--indent", defaultValue = "4", description = "缩进空格数")

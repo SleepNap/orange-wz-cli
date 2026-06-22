@@ -16,6 +16,9 @@ public final class IvSupport {
             case "ems" -> new WzKey(2, "ems", WzAESConstant.WZ_EMS_IV, WzAESConstant.DEFAULT_KEY);
             case "bms" -> new WzKey(3, "bms", WzAESConstant.WZ_BMS_IV, WzAESConstant.DEFAULT_KEY);
             case "classic" -> new WzKey(4, "classic", WzAESConstant.WZ_CLASSIC_IV, WzAESConstant.DEFAULT_KEY);
+            // 兼容旧版取值：cms 与 ems 同字节、latest 与 classic 同字节
+            case "cms" -> new WzKey(2, "ems", WzAESConstant.WZ_EMS_IV, WzAESConstant.DEFAULT_KEY);
+            case "latest" -> new WzKey(4, "classic", WzAESConstant.WZ_CLASSIC_IV, WzAESConstant.DEFAULT_KEY);
             default -> null;
         };
     }

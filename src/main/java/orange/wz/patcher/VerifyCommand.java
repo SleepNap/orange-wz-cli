@@ -34,7 +34,7 @@ public final class VerifyCommand implements Callable<Integer> {
     @Parameters(index = "2", arity = "0..1", description = "完整服务端 XML 或目录（与 diff 同布局），用来恢复 hunk 路径栈")
     Path fullXmlOrDir;
 
-    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS / EMS / BMS / CLASSIC")
+    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS / EMS / BMS / CLASSIC（大小写不敏感；cms/latest 为兼容别名）")
     String ivName;
 
     @Option(names = {"-v", "--verbose"}, description = "打印每条 ok / miss")

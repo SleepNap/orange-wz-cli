@@ -27,7 +27,7 @@ public final class BatchDumpXmlCommand implements Callable<Integer> {
     @Parameters(index = "1", description = "xml 输出根目录")
     Path outDir;
 
-    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS / EMS / BMS / CLASSIC")
+    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS / EMS / BMS / CLASSIC（大小写不敏感；cms/latest 为兼容别名）")
     String ivName;
 
     @Option(names = "--indent", defaultValue = "4", description = "缩进空格数")
