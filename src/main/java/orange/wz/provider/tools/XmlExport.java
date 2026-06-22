@@ -204,11 +204,21 @@ public final class XmlExport {
                     writeLineSeparator();
                 }
                 case WzStringProperty prop -> {
-                    writer.write("<string name=\"" + escapeText(prop.getName()) + "\" value=\"" + escapeText(prop.getValue()) + "\"/>");
+                    String v = prop.getValue();
+                    if (v == null) {
+                        writer.write("<string name=\"" + escapeText(prop.getName()) + "\"/>");
+                    } else {
+                        writer.write("<string name=\"" + escapeText(prop.getName()) + "\" value=\"" + escapeText(v) + "\"/>");
+                    }
                     writeLineSeparator();
                 }
                 case WzUOLProperty prop -> {
-                    writer.write("<uol name=\"" + escapeText(prop.getName()) + "\" value=\"" + escapeText(prop.getValue()) + "\"/>");
+                    String v = prop.getValue();
+                    if (v == null) {
+                        writer.write("<uol name=\"" + escapeText(prop.getName()) + "\"/>");
+                    } else {
+                        writer.write("<uol name=\"" + escapeText(prop.getName()) + "\" value=\"" + escapeText(v) + "\"/>");
+                    }
                     writeLineSeparator();
                 }
                 case WzVectorProperty prop -> {

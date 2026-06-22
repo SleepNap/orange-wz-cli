@@ -262,13 +262,13 @@ public final class ImgPatcher {
     /** 用 SubTree 的叶子值覆盖 existing 节点。调用方保证类型匹配。 */
     private void applyLeafFromSubTree(WzObject existing, SubTree tree) {
         switch (existing) {
-            case WzStringProperty p -> p.setValue(tree.value() == null ? "" : tree.value());
+            case WzStringProperty p -> p.setValue(tree.value());
             case WzIntProperty p -> p.setValue(parseInt(tree.value()));
             case WzShortProperty p -> p.setValue(parseShort(tree.value()));
             case WzLongProperty p -> p.setValue(parseLong(tree.value()));
             case WzFloatProperty p -> p.setValue(parseFloat(tree.value()));
             case WzDoubleProperty p -> p.setValue(parseDouble(tree.value()));
-            case WzUOLProperty p -> p.setValue(tree.value() == null ? "" : tree.value());
+            case WzUOLProperty p -> p.setValue(tree.value());
             case WzVectorProperty p -> {
                 if (tree.x() != null) p.setX(tree.x());
                 if (tree.y() != null) p.setY(tree.y());
@@ -333,13 +333,13 @@ public final class ImgPatcher {
 
     private void applyValue(WzObject node, Change c) {
         switch (node) {
-            case WzStringProperty p -> p.setValue(c.value() == null ? "" : c.value());
+            case WzStringProperty p -> p.setValue(c.value());
             case WzIntProperty p -> p.setValue(parseInt(c.value()));
             case WzShortProperty p -> p.setValue(parseShort(c.value()));
             case WzLongProperty p -> p.setValue(parseLong(c.value()));
             case WzFloatProperty p -> p.setValue(parseFloat(c.value()));
             case WzDoubleProperty p -> p.setValue(parseDouble(c.value()));
-            case WzUOLProperty p -> p.setValue(c.value() == null ? "" : c.value());
+            case WzUOLProperty p -> p.setValue(c.value());
             case WzVectorProperty p -> {
                 if (c.x() != null) p.setX(c.x());
                 if (c.y() != null) p.setY(c.y());
@@ -362,14 +362,14 @@ public final class ImgPatcher {
 
     private WzImageProperty buildLeaf(String name, ValueType type, String value, Integer x, Integer y, WzImage img) {
         return switch (type) {
-            case STRING -> new WzStringProperty(name, value == null ? "" : value, null, img);
+            case STRING -> new WzStringProperty(name, value, null, img);
             case INT -> new WzIntProperty(name, parseInt(value), null, img);
             case SHORT -> new WzShortProperty(name, parseShort(value), null, img);
             case LONG -> new WzLongProperty(name, parseLong(value), null, img);
             case FLOAT -> new WzFloatProperty(name, parseFloat(value), null, img);
             case DOUBLE -> new WzDoubleProperty(name, parseDouble(value), null, img);
             case VECTOR -> new WzVectorProperty(name, x == null ? 0 : x, y == null ? 0 : y, null, img);
-            case UOL -> new WzUOLProperty(name, value == null ? "" : value, null, img);
+            case UOL -> new WzUOLProperty(name, value, null, img);
             case NULL -> new WzNullProperty(name, null, img);
             default -> throw new RuntimeException("不能构建的叶子类型: " + type);
         };

@@ -146,7 +146,7 @@ public final class BinaryWriter {
 
     /* Write ---------------------------------------------------------------------------------------------------------*/
     private void writeString(String value) {
-        if (value.isEmpty()) {
+        if (value == null || value.isEmpty()) {
             putByte((byte) 0);
             return;
         }
