@@ -1,10 +1,8 @@
 package orange.wz.patcher;
 
-import orange.wz.provider.WzAESConstant;
 import orange.wz.provider.WzImageFile;
 import orange.wz.provider.tools.MediaExportType;
 import orange.wz.provider.tools.wzkey.WzKey;
-import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -17,8 +15,8 @@ import java.util.concurrent.Callable;
  * .img → .xml 导出子命令。供 patcher 验证使用：把 patched .img 转成 xml
  * 与服务端 upgrade 目录下的 xml 做 diff 对比。
  */
-@Command(name = "export-xml", description = "把 .img 文件导出为 XML")
-public final class ExportXmlCommand implements Callable<Integer> {
+@Command(name = "dump-xml", description = "把 .img 文件导出为 XML")
+public final class DumpXmlCommand implements Callable<Integer> {
 
     @Parameters(index = "0", description = "源 .img 文件")
     Path inputImg;
@@ -26,7 +24,7 @@ public final class ExportXmlCommand implements Callable<Integer> {
     @Parameters(index = "1", description = "输出 .xml 文件")
     Path outputXml;
 
-    @Option(names = "--iv", defaultValue = "gms", description = "WZ IV：gms / cms / latest")
+    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS / EMS / BMS / CLASSIC（大小写不敏感）")
     String ivName;
 
     @Option(names = "--indent", defaultValue = "4", description = "缩进空格数")
@@ -41,14 +39,9 @@ public final class ExportXmlCommand implements Callable<Integer> {
             System.err.println("[err] input.img 不存在: " + inputImg);
             return 2;
         }
-        WzKey key = switch (ivName.toLowerCase()) {
-            case "gms" -> new WzKey(1, "gms", WzAESConstant.WZ_GMS_IV, WzAESConstant.DEFAULT_KEY);
-            case "cms" -> new WzKey(2, "cms", WzAESConstant.WZ_CMS_IV, WzAESConstant.DEFAULT_KEY);
-            case "latest" -> new WzKey(3, "latest", WzAESConstant.WZ_LATEST_IV, WzAESConstant.DEFAULT_KEY);
-            default -> null;
-        };
+        WzKey key = IvSupport.resolve(ivName);
         if (key == null) {
-            System.err.println("[err] 未知 IV: " + ivName);
+            System.err.println("[err] 未知 IV: " + ivName + "（支持 GMS / EMS / BMS / CLASSIC）");
             return 2;
         }
         WzImageFile img = new WzImageFile(

@@ -12,44 +12,59 @@
 
 ## 用法
 
-### 基本
+### 子命令
 
-```bash
-java -jar xml-img-patcher.jar patch <input.img> <diff.xml.diff> <output.img> [选项]
+```
+xml-img-patcher patch          <input.img> <diff> <output.img> [选项]
+xml-img-patcher dump-xml       <input.img> <output.xml>        [选项]
+xml-img-patcher batch          <img目录> <diff目录> <输出目录> [选项]
+xml-img-patcher batch-dump-xml <img目录> <xml输出目录>         [选项]
+xml-img-patcher verify         <patched.img> <diff> [full-xml或目录] [选项]
 ```
 
-或者 `patch` 子命令省略写：
+| 子命令 | 作用 |
+|---|---|
+| `patch` | 对一个 .img 应用一个 .diff，输出新 .img。保留 PNG/Sound/UOL 等所有 diff 没碰过的二进制资源 |
+| `dump-xml` | 把 .img 转成服务端格式的 .xml，方便肉眼看或对比 |
+| `batch` | 批量版的 patch。按文件名自动配对：diff 目录下 `a/b/Foo.img.xml.diff` → 找 img 目录里的 `a/b/Foo.img` → 写到输出目录 `a/b/Foo.img`。diff 目录可多层嵌套，工具会递归扫所有 `*.diff`。没找到对应 img 的 diff 会跳过并在最后 BATCH SUMMARY 汇总 |
+| `batch-dump-xml` | 批量版的 dump-xml。递归把目录下所有 .img 都转成 .xml |
+| `verify` | 校验：直接加载 patch 后的 .img，把 diff 里每条 + 变更（Add/Modify）查节点比对值；DELETE 查节点是否已消失。绕过 dump-xml 序列化，测的就是 img 的实际内容 |
 
-```bash
-java -jar xml-img-patcher.jar <input.img> <diff.xml.diff> <output.img>
-```
-
-### 选项
+### patch 选项
 
 | 选项 | 说明 |
 |---|---|
 | `-v, --verbose` | 实时打印每条 change 的处理过程 |
 | `--dry-run` | 解析 diff、加载 img、模拟 patch，**不写文件** |
 | `--strict` | 任何一条 change 失败立即中止；默认是尽力做完，最后汇总 |
-| `--iv <gms\|cms\|latest>` | WZ 加密 IV，默认 `gms`（GMS v83） |
+| `--iv <GMS\|EMS\|BMS\|CLASSIC>` | WZ 加密 IV，默认 `GMS`（大小写不敏感） |
 | `--full-xml <file>` | 完整服务端 XML（diff `+++` 那一侧的最终文件）。当 hunk 上下文不带外层 imgdir 时，用它从 hunk 头的行号反查路径栈，避免歧义/找不到节点。**强烈推荐配** |
-| `--full-xml-dir <dir>` | 完整服务端 XML 根目录，会按 diff 路径自动配对（如 `wz-zh-CN/Quest.wz/Act.img.xml.diff` → `<dir>/wz-zh-CN/Quest.wz/Act.img.xml`）。批量处理时用这个，比 `--full-xml` 省事 |
+| `--full-xml-dir <dir>` | 完整服务端 XML 根目录，会按 diff 路径自动配对。批量处理时用这个，比 `--full-xml` 省事 |
 
-### 把 .img 导出为 XML
-
-调试或验证时需要看 patched .img 的内容：
-
-```bash
-java -jar xml-img-patcher.jar export-xml <input.img> <output.xml> [选项]
-```
+### batch 选项
 
 | 选项 | 说明 |
 |---|---|
-| `--iv <gms\|cms\|latest>` | 同上 |
+| `--full-xml-dir <dir>` | 完整服务端 XML 根目录（按 diff 路径自动配对） |
+| `--dry-run` / `--strict` / `--iv` / `-v` | 同 patch |
+
+### dump-xml 选项
+
+| 选项 | 说明 |
+|---|---|
+| `--iv <GMS\|EMS\|BMS\|CLASSIC>` | 同上 |
 | `--indent <N>` | 缩进空格数，默认 4 |
 | `--linux` | 用 LF 换行（默认 CRLF） |
 
-注意：默认会**跳过 PNG / Sound 等二进制资源**（只输出节点骨架），便于纯文本对比。
+默认会**跳过 PNG / Sound 等二进制资源**（只输出节点骨架），便于纯文本对比。
+
+### verify 选项
+
+| 选项 | 说明 |
+|---|---|
+| `<full-xml 或目录>` | 第 3 个位置参数。完整服务端 XML 文件，或与之同布局的目录（工具会按 diff 文件名配对查找）。用来恢复 hunk 路径栈 |
+| `--iv <GMS\|EMS\|BMS\|CLASSIC>` | 同上 |
+| `-v` | 打印每条 ok / miss |
 
 ## 退出码
 
@@ -75,27 +90,46 @@ java -jar xml-img-patcher.jar export-xml <input.img> <output.xml> [选项]
 3 applied, 1 failed. Output: D:\out.img (1,335,712 bytes)
 ```
 
-## 典型 batch 脚本
+## 典型用法
 
-把整目录的 diff 应用到 `client/Data` 下对应的 .img：
+### 单文件 patch
 
 ```bash
-DIFF_DIR=/path/to/diff_20260619
-XML_DIR=/path/to/upgrade_20260619       # 服务端完整 XML
-CLIENT=/path/to/BeiDou-Client/Data
-OUT=/path/to/patched-Data
-
-while IFS= read -r -d '' diff; do
-  rel="${diff#$DIFF_DIR/}"              # e.g. wz/Item.wz/Etc/0403.img.xml.diff
-  rel="${rel#wz/}"; rel="${rel#wz-zh-CN/}"
-  img="${rel%.img.xml.diff}.img"        # e.g. Item.wz/Etc/0403.img
-  img="${img//.wz\//\/}"                # 去掉 .wz/  → Item/Etc/0403.img
-  src="$CLIENT/$img"
-  dst="$OUT/$img"
-  mkdir -p "$(dirname "$dst")"
-  java -jar xml-img-patcher.jar patch "$src" "$diff" "$dst" --full-xml-dir "$XML_DIR"
-done < <(find "$DIFF_DIR" -name "*.diff" -print0)
+xml-img-patcher patch \
+  --full-xml=C:/upgrade_20260622/wz-zh-CN/Quest.wz/QuestInfo.img.xml \
+  C:/client/Data/Quest/QuestInfo.img \
+  C:/diff_20260622/wz-zh-CN/Quest.wz/QuestInfo.img.xml.diff \
+  C:/out/Quest/QuestInfo.img
 ```
+
+### 批量 patch
+
+```bash
+xml-img-patcher batch \
+  --full-xml-dir=C:/upgrade_20260622/wz-zh-CN \
+  C:/client/Data \
+  C:/diff_20260622/wz-zh-CN \
+  C:/out/Data
+```
+
+末尾会打印 `BATCH SUMMARY`，汇总 ok / fail / skip 文件数和每个失败/跳过的原因。
+
+### 批量导出 XML
+
+```bash
+xml-img-patcher batch-dump-xml C:/client/Data C:/out_xml/Data
+```
+
+### 校验
+
+```bash
+xml-img-patcher verify \
+  C:/out/Quest/QuestInfo.img \
+  C:/diff_20260622/wz-zh-CN/Quest.wz/QuestInfo.img.xml.diff \
+  C:/upgrade_20260622/wz-zh-CN
+```
+
+输出 `verify: N expected, M match, K miss`，miss=0 即通过。
 
 ## 构建
 
@@ -107,6 +141,19 @@ mvn -DskipTests package
 ```
 
 Windows 用户：项目根的 `build.bat` 是封装好的一键构建。
+
+### Native exe（GraalVM）
+
+用 GraalVM native-image 出独立 exe，启动 0 延迟、不依赖 JRE：
+
+```cmd
+build-native.bat
+:: 产出 dist\xml-img-patcher.exe
+```
+
+要求：GraalVM JDK 21 + MSVC 工具链（vcvarsall.bat）。脚本里硬编码了作者本机的路径，换机构建需改脚本里的 `JAVA_HOME` 和 `VCDIR`。
+
+
 
 ## 开发与测试
 

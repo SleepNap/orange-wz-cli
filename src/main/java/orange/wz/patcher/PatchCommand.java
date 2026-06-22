@@ -3,7 +3,6 @@ package orange.wz.patcher;
 import orange.wz.patcher.model.Change;
 import orange.wz.patcher.parser.DiffParser;
 import orange.wz.patcher.patch.ImgPatcher;
-import orange.wz.provider.WzAESConstant;
 import orange.wz.provider.tools.wzkey.WzKey;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -36,7 +35,7 @@ public final class PatchCommand implements Callable<Integer> {
     @Option(names = "--strict", description = "任何一条 change 失败立即中止")
     boolean strict;
 
-    @Option(names = "--iv", defaultValue = "gms", description = "WZ IV：gms（默认） / cms / latest")
+    @Option(names = "--iv", defaultValue = "GMS", description = "WZ IV：GMS（默认） / EMS / BMS / CLASSIC（大小写不敏感）")
     String ivName;
 
     @Option(names = "--full-xml", description = "完整服务端 XML（diff +++ 那一侧）。当 hunk 上下文不带外层 imgdir 时，"
@@ -87,9 +86,9 @@ public final class PatchCommand implements Callable<Integer> {
             }
         }
 
-        WzKey key = buildKey(ivName);
+        WzKey key = IvSupport.resolve(ivName);
         if (key == null) {
-            System.err.println("[err] 未知 IV: " + ivName + "（可选：gms / cms / latest）");
+            System.err.println("[err] 未知 IV: " + ivName + "（支持 GMS / EMS / BMS / CLASSIC）");
             return 2;
         }
 
@@ -115,19 +114,11 @@ public final class PatchCommand implements Callable<Integer> {
         } catch (Exception e) {
             size = -1;
         }
-        System.out.println(result.applied() + " applied, " + result.failed() + " failed. Output: " + outputImg + " (" + size + " bytes)");
+        String suffix = dryRun ? " (dry-run, not written)" : "";
+        System.out.println(result.applied() + " applied, " + result.failed() + " failed. Output: " + outputImg + " (" + size + " bytes)" + suffix);
 
         if (result.failed() > 0) return 1;
         return 0;
-    }
-
-    private static WzKey buildKey(String name) {
-        return switch (name.toLowerCase()) {
-            case "gms" -> new WzKey(1, "gms", WzAESConstant.WZ_GMS_IV, WzAESConstant.DEFAULT_KEY);
-            case "cms" -> new WzKey(2, "cms", WzAESConstant.WZ_CMS_IV, WzAESConstant.DEFAULT_KEY);
-            case "latest" -> new WzKey(3, "latest", WzAESConstant.WZ_LATEST_IV, WzAESConstant.DEFAULT_KEY);
-            default -> null;
-        };
     }
 
     /**

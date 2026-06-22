@@ -77,7 +77,7 @@ public final class XmlExport {
             writeLineSeparator();
 
 
-            writer.write("<imgdir name=\"" + imgName + "\" indent=\"" + indent + "\" media=\"" + meType.name() + "\">");
+            writer.write("<imgdir name=\"" + imgName + "\">");
             writeLineSeparator();
             curIndent++;
             image.getChildren().forEach(prop -> writeProp(prop, ""));

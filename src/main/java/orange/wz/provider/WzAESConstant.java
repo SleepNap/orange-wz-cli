@@ -9,6 +9,11 @@ public final class WzAESConstant {
 
     public static final byte[] WZ_LATEST_IV = new byte[]{0x00, 0x00, 0x00, 0x00};
 
+    // 对齐 MapleLib 命名（GMS / EMS / BMS / CLASSIC）：EMS 与 CMS 同字节、BMS/CLASSIC 与 LATEST 同字节。
+    public static final byte[] WZ_EMS_IV = WZ_CMS_IV;
+    public static final byte[] WZ_BMS_IV = WZ_LATEST_IV;
+    public static final byte[] WZ_CLASSIC_IV = WZ_LATEST_IV;
+
     public static final int WZ_OFFSET_CONSTANT = 0x581C3F6D;
 
     public static final byte[] DEFAULT_KEY = new byte[]{

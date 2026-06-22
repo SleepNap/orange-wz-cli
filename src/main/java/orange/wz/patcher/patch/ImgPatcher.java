@@ -26,6 +26,7 @@ public final class ImgPatcher {
     private final List<String> messages = new ArrayList<>();
     private final boolean strict;
     private final boolean verbose;
+    private String imgName = ""; // 当前 img 文件名（不含 .img），用于路径回显加根节点
 
     public ImgPatcher(WzKey key, boolean strict, boolean verbose) {
         this.key = key;
@@ -39,6 +40,9 @@ public final class ImgPatcher {
                 inputImg.toAbsolutePath().toString(),
                 key.getName(), key.getIv(), key.getUserKey()
         );
+        // 记下根名（去掉 .img 后缀）用于路径回显，与 C# 版输出对齐
+        String fn = inputImg.getFileName().toString();
+        imgName = fn.endsWith(".img") ? fn.substring(0, fn.length() - ".img".length()) + ".img" : fn;
         if (!imgFile.parse()) {
             return new Result(false, 0, 0, "img 解析失败: " + inputImg, messages);
         }
@@ -62,7 +66,7 @@ public final class ImgPatcher {
         }
 
         if (dryRun) {
-            return new Result(err == 0, ok, err, "dry-run，未写入", messages);
+            return new Result(err == 0, ok, err, null, messages);
         }
 
         imgFile.setChanged(true);
@@ -393,14 +397,23 @@ public final class ImgPatcher {
     }
 
     private String formatOk(Change c) {
+        String path = prefixRoot(c.displayPath());
         return switch (c.op()) {
-            case MODIFY -> "[ok]  MODIFY  " + c.displayPath() + (c.value() != null ? " = \"" + truncate(c.value()) + "\"" : "");
+            case MODIFY -> "[ok]  MODIFY  " + path + (c.value() != null ? " = \"" + truncate(c.value()) + "\"" : "");
             case ADD -> {
                 int count = c.subTree() != null ? c.subTree().countNodes() : 1;
-                yield "[ok]  ADD     " + c.displayPath() + " (" + count + " node" + (count > 1 ? "s" : "") + ")";
+                yield "[ok]  ADD     " + path + " (" + count + " node" + (count > 1 ? "s" : "") + ")";
             }
-            case DELETE -> "[ok]  DELETE  " + c.displayPath();
+            case DELETE -> "[ok]  DELETE  " + path;
         };
+    }
+
+    /** 路径回显加根节点名（如 9999999/name → Mob.img/9999999/name），与 C# 输出对齐。
+     *  若 path 已经以根名开头则不重复加。 */
+    private String prefixRoot(String path) {
+        if (imgName == null || imgName.isEmpty()) return path;
+        if (path.startsWith(imgName + "/") || path.equals(imgName)) return path;
+        return imgName + "/" + path;
     }
 
     private String truncate(String s) {
