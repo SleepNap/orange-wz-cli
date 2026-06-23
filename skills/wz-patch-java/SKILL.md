@@ -1,6 +1,6 @@
 ---
 name: wz-patch-java
-description: 用 Java 版 xml-img-patcher.exe（GraalVM native-image 编译的 standalone 二进制，无需 Java 运行时）把服务端 XML 的 git unified diff 应用到客户端 .img 文件，保留未触及的 PNG/Sound/Canvas/UOL/Vector 等二进制资源。当需要给 MapleStory 客户端 .img 打补丁、批量打补丁、把 .img 导出成 XML、或校验 patched .img 是否正确时使用本 skill。exe 路径、子命令、退出码、坑点都在下面。
+description: 用 Java 版 xml-img-patcher.exe（GraalVM native-image 编译的 standalone 二进制，无需 Java 运行时）把服务端 XML 的 git unified diff 应用到客户端 .img 文件，保留未触及的 PNG/Sound/Canvas/UOL/Vector 等二进制资源。当需要从服务端 git 仓库导出 wz xml/diff、给 MapleStory 客户端 .img 打补丁、批量打补丁、把 .img 导出成 XML、或校验 patched .img 是否正确时使用本 skill。exe 路径、子命令、退出码、坑点都在下面。
 ---
 
 # xml-img-patcher（Java 版）使用指南
@@ -46,6 +46,7 @@ $EXE dump-xml       <input.img>  <output.xml>                [选项]
 $EXE batch          <img目录>    <diff目录>   <输出目录>      [选项]
 $EXE batch-dump-xml <img目录>    <xml输出目录>                [选项]
 $EXE verify         <patched.img> <diff>      [full-xml或目录][选项]
+$EXE export         --from=<hash或datetime>                  [选项]
 ```
 
 | 子命令 | 干啥 |
@@ -55,6 +56,32 @@ $EXE verify         <patched.img> <diff>      [full-xml或目录][选项]
 | `batch` | 批量 patch，自动按路径配对 diff↔img |
 | `batch-dump-xml` | 批量 dump-xml |
 | `verify` | 加载 patched .img，把 diff 里每条 `+` 变更跟运行时节点值逐字段比对。**最权威的校验** |
+| `export` | 从 git 仓库导出服务端补丁 xml + diff，等价于 ExportPatch.java |
+
+### export 子命令详解
+
+```bash
+$EXE export \
+  --from=<commit-hash 或 datetime> \
+  --repo=<git仓库根>               \
+  --out-xml=<输出目录>              \  # 默认 ~/Desktop/upgrade_yyyyMMdd
+  --out-diff=<输出目录>             \  # 默认 ~/Desktop/diff_yyyyMMdd
+  [--prefix=gms-server/wz,gms-server/wz-zh-CN]  # 默认这俩
+  [--no-diff]                       \  # 只复制 xml 不生成 diff
+  [--context=30]                    \  # git diff 上下文行数
+  [-v]
+```
+
+**`--from` 同时支持两种形态**：
+
+1. **git commit hash** — `27529d68`、`HEAD~3`、`main`、`v1.0`…… 凡 `git rev-parse` 认识的 ref 都行
+2. **datetime** — 自动找该时间点之前的最近一个 commit，然后导出它到 HEAD 的变更：
+   - `2026-06-22`（当日 00:00 之前）
+   - `2026-06-22 15:30`、`2026-06-22T15:30:00`、`2026-06/22` 等
+
+输出：两套镜像目录，`wz/` 和 `wz-zh-CN/`。xml 目录结构和服务端一致，diff 目录是每个 xml 加 `.diff`。
+
+**`export` + `batch` 是完整工作流的标准组合**：先用 `export` 从服务端仓库拉补丁，再用 `batch` 打到客户端。（参见典型用法最后两个场景）
 
 ## 选项
 
@@ -70,6 +97,13 @@ $EXE verify         <patched.img> <diff>      [full-xml或目录][选项]
 | `--full-xml-dir=<目录>` | patch, batch | 完整服务端 XML 根目录，按目录结构自动配对 |
 | `--linux` | dump-xml, batch-dump-xml | 输出用 LF 行尾（默认 CRLF） |
 | `--indent=<N>` | dump-xml, batch-dump-xml | 缩进空格数，默认 4 |
+| `--from=<hash或datetime>` | export | 起点（必填） |
+| `--repo=<dir>` | export | git 仓库根（默认当前目录） |
+| `--out-xml=<dir>` | export | xml 输出根（默认 ~/Desktop/upgrade_yyyyMMdd） |
+| `--out-diff=<dir>` | export | diff 输出根（默认 ~/Desktop/diff_yyyyMMdd） |
+| `--prefix=<pref>` | export | 扫描目录前缀（可多个，默认 gms-server/wz,wz-zh-CN） |
+| `--no-diff` | export | 只复制 xml，不生成 diff |
+| `--context=<N>` | export | git diff 上下文行数 -U（默认 30） |
 
 ## 退出码（脚本要靠它判断成败）
 
@@ -144,14 +178,65 @@ $EXE verify \
 $EXE dump-xml "E:\Client\EN\String\Mob.img" "C:\out\Mob.xml" --indent 2 --linux
 ```
 
+### 从服务端 git 仓库导出 xml + diff
+
+按 commit hash：
+
+```bash
+$EXE export \
+  --from=27529d68 \
+  --repo="E:\LocalGit\GitHub\BeiDou-Server"
+# → ~/Desktop/upgrade_20260623/{wz,wz-zh-CN}/   完整 xml
+# → ~/Desktop/diff_20260623/{wz,wz-zh-CN}/      对应 .diff
+```
+
+按时间点（找该时刻前最近一次 commit 作为起点）：
+
+```bash
+$EXE export \
+  --from="2026-06-22 14:00" \
+  --repo="E:\LocalGit\GitHub\BeiDou-Server"
+```
+
+### 一站式工作流：从服务端拉 → 打到客户端 → 验
+
+最常用的组合。两步走，中间产物可重复使用：
+
+```bash
+# Step 1: 从服务端 git 仓库导出补丁数据
+$EXE export --from=27529d68 \
+  --repo="E:\LocalGit\GitHub\BeiDou-Server" \
+  --out-xml=C:\upgrade --out-diff=C:\diff
+
+# Step 2a: wz 层（英文层）应用到客户端 EN 目录
+$EXE batch --full-xml-dir=C:\upgrade\wz \
+  "E:\Client\EN" "C:\diff\wz" "C:\out\EN"
+
+# Step 2b: wz-zh-CN 层应用到客户端 Data 目录
+$EXE batch --full-xml-dir=C:\upgrade\wz-zh-CN \
+  "E:\Client\Data" "C:\diff\wz-zh-CN" "C:\out\Data"
+
+# Step 3: 校验（可选但推荐）
+$EXE verify "C:\out\Data\Quest\Say.img" \
+  "C:\diff\wz-zh-CN\Quest.wz\Say.img.xml.diff" \
+  "C:\upgrade\wz-zh-CN"
+```
+
+**关键映射规则**（patch/batch 共用）：
+- 服务端 `wz/` 层 → 客户端 `EN/`（英文文本）目录（若不存在则回退到 `Data/`）
+- 服务端 `wz-zh-CN/` 层 → 客户端 `Data/`（中文汉化）目录
+- diff 路径 `String.wz/Mob.img.xml.diff` 自动剥 `.wz` 段 → img 路径 `String/Mob.img`
+
 ## 决策流程
 
-1. **要改一个 .img** → `patch`，带上 `--full-xml` 或 `--full-xml-dir`
-2. **要改一整个目录** → `batch`，带 `--full-xml-dir`
-3. **不确定能不能成** → 先 `--dry-run`
-4. **改完要确认对不对** → `verify`（比肉眼看 dump-xml 可靠）
-5. **只想看 .img 里有什么** → `dump-xml`
-6. **img 解析失败（退出 4）** → 99% 是 `--iv` 给错了，默认 `gms` 对应 GMS v83 客户端
+1. **没有 diff，只有服务端 git 仓库** → `export --from=<hash或datetime>` 先生成 xml + diff
+2. **要改一个 .img** → `patch`，带上 `--full-xml` 或 `--full-xml-dir`
+3. **要改一整个目录** → `batch`，带 `--full-xml-dir`
+4. **完整工作流（从服务端到客户端）** → `export` → `batch` → `verify`（见上方一站式示例）
+5. **不确定能不能成** → 先 `--dry-run`
+6. **改完要确认对不对** → `verify`（比肉眼看 dump-xml 可靠）
+7. **只想看 .img 里有什么** → `dump-xml`
+8. **img 解析失败（退出 4）** → 99% 是 `--iv` 给错了，默认 `gms` 对应 GMS v83 客户端
 
 ## 已知限制
 
@@ -162,9 +247,11 @@ $EXE dump-xml "E:\Client\EN\String\Mob.img" "C:\out\Mob.xml" --indent 2 --linux
 
 ## 和 C# 版的关系
 
-姊妹仓库 `MapleLib-cli`（C# 实现）功能、子命令、选项、退出码、输出格式**完全一致**，脚本可互换。
+姊妹仓库 `MapleLib-cli`（C# 实现）的核心子命令（`patch / dump-xml / batch / batch-dump-xml / verify`）选项、退出码、输出格式与本仓库**完全一致**，脚本可互换。
 
 - C# 产物：`xml-img-patcher.exe`（self-contained，.NET AOT/publish 单文件）
 - Java 产物：`xml-img-patcher.exe`（GraalVM native，standalone）
 
 两边都用 exe 的话，调用方式完全一样，连 `$EXE` 都可以指向同一个命令名。两边 `dump-xml --linux` 输出逐字节一致。
+
+**差异**：`export` 子命令 **只在 Java 版有**。需要从服务端 git 仓库拉补丁时，必须用 Java 版的 `export`，或直接调 BeiDou-Server 那边的 `ExportPatch.java`。
