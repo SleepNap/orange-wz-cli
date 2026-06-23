@@ -12,11 +12,11 @@ import java.util.Set;
         mixinStandardHelpOptions = true,
         version = "xml-img-patcher 0.0.1",
         description = "把服务端 XML 的 git unified diff 应用到客户端 .img 文件，保留所有未触及的 PNG / Sound 等二进制资源。",
-        subcommands = { PatchCommand.class, DumpXmlCommand.class, BatchCommand.class, VerifyCommand.class, BatchDumpXmlCommand.class }
+        subcommands = { PatchCommand.class, DumpXmlCommand.class, BatchCommand.class, VerifyCommand.class, BatchDumpXmlCommand.class, ExportCommand.class }
 )
 public final class Main {
 
-    private static final Set<String> KNOWN_COMMANDS = Set.of("patch", "dump-xml", "batch", "verify", "batch-dump-xml");
+    private static final Set<String> KNOWN_COMMANDS = Set.of("patch", "dump-xml", "batch", "verify", "batch-dump-xml", "export");
 
     public static void main(String[] args) {
         System.setOut(new PrintStream(System.out, true, StandardCharsets.UTF_8));
@@ -28,7 +28,7 @@ public final class Main {
                 && !args[0].equals("--help") && !args[0].equals("-h")
                 && !args[0].equals("--version") && !args[0].equals("-V")) {
             System.err.println("[err] unknown command: " + args[0]);
-            System.err.println("      已知子命令: patch, dump-xml, batch, verify, batch-dump-xml");
+            System.err.println("      已知子命令: patch, dump-xml, batch, verify, batch-dump-xml, export");
             System.exit(2);
         }
 

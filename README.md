@@ -20,6 +20,7 @@ xml-img-patcher dump-xml       <input.img> <output.xml>        [选项]
 xml-img-patcher batch          <img目录> <diff目录> <输出目录> [选项]
 xml-img-patcher batch-dump-xml <img目录> <xml输出目录>         [选项]
 xml-img-patcher verify         <patched.img> <diff> [full-xml或目录] [选项]
+xml-img-patcher export         --from=<hash或datetime>        [选项]
 ```
 
 | 子命令 | 作用 |
@@ -29,6 +30,7 @@ xml-img-patcher verify         <patched.img> <diff> [full-xml或目录] [选项]
 | `batch` | 批量版的 patch。按文件名自动配对：diff 目录下 `a/b/Foo.img.xml.diff` → 找 img 目录里的 `a/b/Foo.img` → 写到输出目录 `a/b/Foo.img`。diff 目录可多层嵌套，工具会递归扫所有 `*.diff`。没找到对应 img 的 diff 会跳过并在最后 BATCH SUMMARY 汇总 |
 | `batch-dump-xml` | 批量版的 dump-xml。递归把目录下所有 .img 都转成 .xml |
 | `verify` | 校验：直接加载 patch 后的 .img，把 diff 里每条 + 变更（Add/Modify）查节点比对值；DELETE 查节点是否已消失。绕过 dump-xml 序列化，测的就是 img 的实际内容 |
+| `export` | 从 git 仓库导出指定起点之后的 wz xml 与 diff，等价于服务端 `ExportPatch.java`。`--from` 同时支持 commit hash 和 datetime |
 
 ### patch 选项
 
