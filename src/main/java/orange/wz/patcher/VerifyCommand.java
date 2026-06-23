@@ -101,6 +101,15 @@ public final class VerifyCommand implements Callable<Integer> {
         for (Change c : changes) {
             // 只校验 Add / Modify / Delete
             if (c.op() == ChangeOp.ADD || c.op() == ChangeOp.MODIFY) {
+                // ADD 携带 SubTree 时（容器或叶子），递归展平成"每个节点一个期望"逐个验，
+                // 不能只检顶层容器存在——否则 diff 在容器内部嵌套的 int/string 漏写也发现不了。
+                if (c.op() == ChangeOp.ADD && c.subTree() != null) {
+                    int[] r = verifyExpanded(img, c.path(), c.subTree());
+                    total += r[0];
+                    match += r[1];
+                    miss += r[2];
+                    continue;
+                }
                 total++;
                 WzObject node = resolve(img, c.path());
                 if (node == null) {
@@ -146,6 +155,78 @@ public final class VerifyCommand implements Callable<Integer> {
             if (samePath(c.path(), dp)) return true;
         }
         return false;
+    }
+
+    /**
+     * 递归验 ADD 子树：path 是 SubTree.name 在 img 里的完整路径（与 Change.path 一致）。
+     * 容器节点验"存在"，叶子节点验"类型 + 值"。一棵子树的每个节点各算一次 expected。
+     * 返回 {expected, match, miss}。
+     */
+    private int[] verifyExpanded(WzImageFile img, List<String> path, orange.wz.patcher.model.SubTree tree) {
+        int expected = 0, match = 0, miss = 0;
+        // 1) 验当前节点
+        expected++;
+        WzObject node = resolve(img, path);
+        String pathStr = displayPathRaw(img, path);
+        if (node == null) {
+            miss++;
+            System.err.println("[miss] " + pathStr + " — node not found");
+        } else if (tree.type() == ValueType.SUB) {
+            // 容器只检存在 + 类型
+            if (node instanceof WzListProperty || node instanceof orange.wz.provider.WzImage) {
+                match++;
+                if (verbose) System.out.println("[ok ] " + pathStr);
+            } else {
+                miss++;
+                System.err.println("[miss] " + pathStr + " — want container got " + node.getClass().getSimpleName());
+            }
+        } else {
+            // 叶子按类型 + 值核对
+            String err = checkLeafValue(node, tree);
+            if (err == null) {
+                match++;
+                if (verbose) System.out.println("[ok ] " + pathStr);
+            } else {
+                miss++;
+                System.err.println("[miss] " + pathStr + " — " + err);
+            }
+        }
+        // 2) 递归子节点（叶子的 children 为空，不会进循环）
+        for (orange.wz.patcher.model.SubTree child : tree.children()) {
+            List<String> childPath = new java.util.ArrayList<>(path);
+            childPath.add(child.name());
+            int[] r = verifyExpanded(img, childPath, child);
+            expected += r[0];
+            match += r[1];
+            miss += r[2];
+        }
+        return new int[]{expected, match, miss};
+    }
+
+    /** 按 SubTree 的类型/值核对叶子节点。返回 null = 匹配。 */
+    private String checkLeafValue(WzObject node, orange.wz.patcher.model.SubTree tree) {
+        return switch (tree.type()) {
+            case STRING -> (node instanceof WzStringProperty s) ? cmpString(s.getValue(), tree.value()) : typeMismatch(node, "string");
+            case UOL    -> (node instanceof WzUOLProperty s) ? cmpString(s.getValue(), tree.value()) : typeMismatch(node, "uol");
+            case INT    -> (node instanceof WzIntProperty p) ? cmpNum(String.valueOf(p.getValue()), tree.value()) : typeMismatch(node, "int");
+            case SHORT  -> (node instanceof WzShortProperty p) ? cmpNum(String.valueOf(p.getValue()), tree.value()) : typeMismatch(node, "short");
+            case LONG   -> (node instanceof WzLongProperty p) ? cmpNum(String.valueOf(p.getValue()), tree.value()) : typeMismatch(node, "long");
+            case FLOAT  -> (node instanceof WzFloatProperty p) ? cmpNum(String.valueOf(p.getValue()), tree.value()) : typeMismatch(node, "float");
+            case DOUBLE -> (node instanceof WzDoubleProperty p) ? cmpNum(String.valueOf(p.getValue()), tree.value()) : typeMismatch(node, "double");
+            case VECTOR -> (node instanceof WzVectorProperty p)
+                    ? (eqInt(p.getX(), tree.x()) && eqInt(p.getY(), tree.y()) ? null
+                            : "vector 不匹配 want=(" + tree.x() + "," + tree.y() + ") got=(" + p.getX() + "," + p.getY() + ")")
+                    : typeMismatch(node, "vector");
+            case NULL   -> (node instanceof WzNullProperty) ? null : typeMismatch(node, "null");
+            default     -> null;
+        };
+    }
+
+    /** 路径展示：自动加根名前缀。 */
+    private String displayPathRaw(WzImageFile img, List<String> path) {
+        if (path.isEmpty()) return img.getName();
+        if (path.get(0).equalsIgnoreCase(img.getName())) return String.join("/", path);
+        return img.getName() + "/" + String.join("/", path);
     }
 
     private static boolean samePath(List<String> a, List<String> b) {
