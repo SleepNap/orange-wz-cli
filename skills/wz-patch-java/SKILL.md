@@ -13,6 +13,8 @@ GraalVM native-image 编译的 standalone exe，**不需要装 Java**：
 dist/xml-img-patcher.exe
 ```
 
+仓库地址：<https://github.com/SleepNap/orange-wz-cli>
+
 `dist/` 下的几个 `.dll`（awt/java/jvm/javajpeg/lcms）是 GraalVM 运行时依赖，要和 exe 放一起，别单独挪 exe。
 
 构建（需要 GraalVM JDK 21 + MSVC，耗时 5~10 分钟）：
@@ -247,11 +249,11 @@ $EXE verify "C:\out\Data\Quest\Say.img" \
 
 ## 和 C# 版的关系
 
-姊妹仓库 `MapleLib-cli`（C# 实现）的核心子命令（`patch / dump-xml / batch / batch-dump-xml / verify`）选项、退出码、输出格式与本仓库**完全一致**，脚本可互换。
+姊妹仓库 `MapleLib-cli`（C# 实现）功能、子命令（`patch / dump-xml / batch / batch-dump-xml / verify / export`）、选项、退出码、输出格式与本仓库**完全一致**，脚本可互换。
 
-- C# 产物：`xml-img-patcher.exe`（self-contained，.NET AOT/publish 单文件）
-- Java 产物：`xml-img-patcher.exe`（GraalVM native，standalone）
+| 实现 | 仓库 | 产物 |
+|---|---|---|
+| Java | <https://github.com/SleepNap/orange-wz-cli> | `dist/xml-img-patcher.exe`（GraalVM native，standalone） |
+| C# | <https://github.com/SleepNap/MapleLib-cli> | `dist/xml-img-patcher.exe`（.NET AOT/publish 单文件） |
 
 两边都用 exe 的话，调用方式完全一样，连 `$EXE` 都可以指向同一个命令名。两边 `dump-xml --linux` 输出逐字节一致。
-
-**差异**：`export` 子命令 **只在 Java 版有**。需要从服务端 git 仓库拉补丁时，必须用 Java 版的 `export`，或直接调 BeiDou-Server 那边的 `ExportPatch.java`。
