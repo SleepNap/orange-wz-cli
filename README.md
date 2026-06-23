@@ -263,13 +263,16 @@ E:\LocalGit\GitHub\BeiDou-Client\         # 客户端 .img 源（EN/ 英文、Da
 
 - **hunk 上下文极短且叶子名在文件中不唯一时**会失败（如 `String.wz/Skill.img` 里 `desc` 出现 600+ 次，hunk 起始切在 imgdir 中部、没有外层 `<imgdir>` 标签可依据）。**解决方法：传 `--full-xml` 或 `--full-xml-dir`**，工具会从 hunk header 的行号反查完整路径，规避此问题。
 - 不支持 `Canvas` / `Sound` / `Convex` 等富媒体节点的 diff 修改（服务端 XML 本来也不会动这些）。
-- 不做 batch / 多文件配对，需要 batch 时用上面的 shell 循环。
+
+## 姊妹仓库
+
+| 实现 | 仓库 | 产物 |
+|---|---|---|
+| Java | <https://github.com/SleepNap/orange-wz-cli> | `dist/xml-img-patcher.exe`（GraalVM native，standalone） |
+| C# | <https://github.com/SleepNap/MapleLib-cli> | `dist/xml-img-patcher.exe`（.NET AOT/publish 单文件） |
+
+两边功能、子命令（`patch / dump-xml / batch / batch-dump-xml / verify / export`）、选项、退出码、输出格式**完全一致**，脚本可互换。两边 `dump-xml --linux` 输出逐字节一致。
 
 ## 许可
 
 MIT。
-
-## 参考
-
-- 项目计划文档（设计动机、调研记录、算法说明）：[`xml-img-patcher-plan.md`](./xml-img-patcher-plan.md)
-- 同源 .NET 实现（用相同算法、可独立运行的 self-contained exe）：见姊妹仓库 `xml-img-patcher-csharp`（如果你有）

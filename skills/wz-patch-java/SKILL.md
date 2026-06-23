@@ -5,28 +5,7 @@ description: 用 Java 版 xml-img-patcher.exe（GraalVM native-image 编译的 s
 
 # xml-img-patcher（Java 版）使用指南
 
-## 工具位置
-
-GraalVM native-image 编译的 standalone exe，**不需要装 Java**：
-
-```
-dist/xml-img-patcher.exe
-```
-
-仓库地址：<https://github.com/SleepNap/orange-wz-cli>
-
-`dist/` 下的几个 `.dll`（awt/java/jvm/javajpeg/lcms）是 GraalVM 运行时依赖，要和 exe 放一起，别单独挪 exe。
-
-构建（需要 GraalVM JDK 21 + MSVC，耗时 5~10 分钟）：
-
-```bash
-build.bat            # 先出 fat jar（中间产物）
-build-native.bat     # 再 native-image 编译，产出 dist/xml-img-patcher.exe
-```
-
-`build-native.bat` 里硬编码了本机路径（`D:\Program Files\Microsoft Visual Studio\2026\Community\VC\Auxiliary\Build\vcvarsall.bat` 和 `D:\Program Files\Java\graalvm-jdk-21.0.11+9.1`），换机器要改。
-
-下文用 `$EXE` 代指 `dist/xml-img-patcher.exe`。
+下文用 `$EXE` 代指 `xml-img-patcher.exe`（已构建好的 standalone 二进制，路径见 README）。
 
 ## 三个输入各是什么
 
@@ -247,13 +226,4 @@ $EXE verify "C:\out\Data\Quest\Say.img" \
 - `--strict` 失败不回滚已应用的修改；用 `--dry-run` 先校验
 - 短 hunk（深嵌套小改动）必须配 `--full-xml` / `--full-xml-dir` 才能正确推路径
 
-## 和 C# 版的关系
-
-姊妹仓库 `MapleLib-cli`（C# 实现）功能、子命令（`patch / dump-xml / batch / batch-dump-xml / verify / export`）、选项、退出码、输出格式与本仓库**完全一致**，脚本可互换。
-
-| 实现 | 仓库 | 产物 |
-|---|---|---|
-| Java | <https://github.com/SleepNap/orange-wz-cli> | `dist/xml-img-patcher.exe`（GraalVM native，standalone） |
-| C# | <https://github.com/SleepNap/MapleLib-cli> | `dist/xml-img-patcher.exe`（.NET AOT/publish 单文件） |
-
-两边都用 exe 的话，调用方式完全一样，连 `$EXE` 都可以指向同一个命令名。两边 `dump-xml --linux` 输出逐字节一致。
+<!-- 姊妹仓库对比信息见 README 末尾 -->
